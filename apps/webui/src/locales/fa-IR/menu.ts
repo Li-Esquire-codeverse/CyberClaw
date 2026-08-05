@@ -49,4 +49,8 @@ export default {
   'menu.editor.flow': 'ویرایشگر جریان',
   'menu.editor.mind': 'ویرایشگر ذهن',
   'menu.editor.koni': 'ویرایشگر Koni',
+  'menu.agents-config': 'پیکربندی Agents',
+  'menu.agents-config.agents': 'Agents',
+  'menu.agents-config.models': 'Models',
+  'menu.agents-config.tools': 'Tools',
 };

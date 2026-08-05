@@ -50,6 +50,35 @@ export default [
     component: './Welcome',
   },
   {
+    path: '/agents-config',
+    name: 'agents-config',
+    icon: 'robot',
+    routes: [
+      {
+        path: '/agents-config',
+        redirect: '/agents-config/agents',
+      },
+      {
+        path: '/agents-config/agents',
+        name: 'agents',
+        icon: 'robot',
+        component: './AgentsConfig/Agents',
+      },
+      {
+        path: '/agents-config/models',
+        name: 'models',
+        icon: 'api',
+        component: './AgentsConfig/Models',
+      },
+      {
+        path: '/agents-config/tools',
+        name: 'tools',
+        icon: 'tool',
+        component: './AgentsConfig/Tools',
+      },
+    ],
+  },
+  {
     path: '/admin',
     name: 'admin',
     icon: 'crown',

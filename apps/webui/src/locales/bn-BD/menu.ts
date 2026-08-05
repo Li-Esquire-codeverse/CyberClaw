@@ -49,4 +49,8 @@ export default {
   'menu.editor.flow': 'ফ্লো এডিটর',
   'menu.editor.mind': 'মাইন্ড এডিটর',
   'menu.editor.koni': 'কোনি সম্পাদক',
+  'menu.agents-config': 'Agents কনফিগারেশন',
+  'menu.agents-config.agents': 'Agents',
+  'menu.agents-config.models': 'Models',
+  'menu.agents-config.tools': 'Tools',
 };

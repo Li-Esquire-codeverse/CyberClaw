@@ -50,4 +50,8 @@ export default {
   'menu.editor.flow': 'Penyusun Alur',
   'menu.editor.mind': 'Penyusun Mind',
   'menu.editor.koni': 'Penyusun Koni',
+  'menu.agents-config': 'Konfigurasi Agents',
+  'menu.agents-config.agents': 'Agents',
+  'menu.agents-config.models': 'Models',
+  'menu.agents-config.tools': 'Tools',
 };

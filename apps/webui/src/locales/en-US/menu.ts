@@ -50,4 +50,8 @@ export default {
   'menu.editor.mind': 'Mind Editor',
   'menu.editor.koni': 'Koni Editor',
   'menu.chatbot': 'AI Assistant',
+  'menu.agents-config': 'Agents Config',
+  'menu.agents-config.agents': 'Agents',
+  'menu.agents-config.models': 'Models',
+  'menu.agents-config.tools': 'Tools',
 };

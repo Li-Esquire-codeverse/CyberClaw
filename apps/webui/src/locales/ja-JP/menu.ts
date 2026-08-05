@@ -49,4 +49,8 @@ export default {
   'menu.editor.flow': 'フローエディタ',
   'menu.editor.mind': 'マインドエディター',
   'menu.editor.koni': 'コニエディター',
+  'menu.agents-config': 'エージェント設定',
+  'menu.agents-config.agents': 'Agents',
+  'menu.agents-config.models': 'Models',
+  'menu.agents-config.tools': 'Tools',
 };
