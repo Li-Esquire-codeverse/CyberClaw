@@ -82,6 +82,7 @@ export default [
     path: '/admin',
     name: 'admin',
     icon: 'crown',
+    hideInMenu: true,
     access: 'canAdmin',
     routes: [
       {
@@ -99,6 +100,7 @@ export default [
     path: '/dashboard',
     name: 'dashboard',
     icon: 'dashboard',
+    hideInMenu: true,
     routes: [
       {
         path: '/dashboard',
@@ -128,6 +130,7 @@ export default [
     path: '/form',
     icon: 'form',
     name: 'form',
+    hideInMenu: true,
     routes: [
       {
         path: '/form',
@@ -157,6 +160,7 @@ export default [
     path: '/list',
     icon: 'table',
     name: 'list',
+    hideInMenu: true,
     routes: [
       {
         path: '/list/search',
@@ -215,6 +219,7 @@ export default [
     path: '/profile',
     name: 'profile',
     icon: 'profile',
+    hideInMenu: true,
     routes: [
       {
         path: '/profile',
@@ -237,6 +242,7 @@ export default [
   {
     name: 'result',
     icon: 'checkCircle',
+    hideInMenu: true,
     path: '/result',
     routes: [
       {
@@ -260,6 +266,7 @@ export default [
   {
     name: 'exception',
     icon: 'warning',
+    hideInMenu: true,
     path: '/exception',
     routes: [
       {
@@ -289,6 +296,7 @@ export default [
   {
     name: 'account',
     icon: 'user',
+    hideInMenu: true,
     path: '/account',
     routes: [
       {

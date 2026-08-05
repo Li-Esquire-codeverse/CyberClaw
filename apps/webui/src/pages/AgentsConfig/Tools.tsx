@@ -5,13 +5,12 @@ import {
   DatabaseOutlined,
   FolderOutlined,
   PictureOutlined,
-  SaveOutlined,
   SearchOutlined,
   TranslationOutlined,
   ToolOutlined,
 } from '@ant-design/icons';
 import { PageContainer, ProCard } from '@ant-design/pro-components';
-import { Button, Card, Col, Row, Space, Switch, Tag, Typography, message } from 'antd';
+import { Card, Col, Row, Space, Switch, Tag, Typography, message } from 'antd';
 import React from 'react';
 import { ClawTool } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
@@ -38,15 +37,6 @@ const ToolsPage: React.FC = () => {
     message.success(`${enabled ? '已启用' : '已禁用'}：${name}`);
   };
 
-  const handleSaveAll = async () => {
-    const res = await persist(config);
-    message.success(
-      res.remote
-        ? '所有工具配置已保存'
-        : '所有工具配置已保存（本地）',
-    );
-  };
-
   return (
     <PageContainer
       title="工具配置"
@@ -54,11 +44,6 @@ const ToolsPage: React.FC = () => {
     >
       <ProCard
         title="内置工具"
-        extra={
-          <Button type="primary" icon={<SaveOutlined />} onClick={handleSaveAll}>
-            保存配置
-          </Button>
-        }
         loading={loading}
       >
         <Row gutter={[16, 16]}>
