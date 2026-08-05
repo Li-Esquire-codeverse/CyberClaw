@@ -5,6 +5,7 @@
   "description": "An open-source AI assistant framework, inspired by OpenClaw",
   "type": "module",
   "workspaces": [
+    "apps/*",
     "packages/*"
   ],
   "engines": {

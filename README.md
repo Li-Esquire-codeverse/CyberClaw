@@ -7,9 +7,12 @@ Built from scratch with an npm-workspaces monorepo.
 ## Monorepo structure
 
 ```
-packages/
+apps/        # Deployable applications
+├── cli/     # CLI entry point
+└── ...      # (future: server, etc.)
+
+packages/    # Reusable libraries
 ├── core/      # Core framework: LLM client, tool system, memory, event bus
-├── cli/       # CLI entry point
 └── adapters/  # Messaging platform adapters (Telegram, etc.)
 ```
 
