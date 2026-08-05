@@ -38,6 +38,3 @@ desktop.ini
 tmp/
 temp/
 *.tmp
-
-# ===== Nested third-party repos (kept independent, update via git pull) =====
-apps/webui/
