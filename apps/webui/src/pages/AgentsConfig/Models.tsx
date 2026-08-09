@@ -69,7 +69,8 @@ const ModelsPage: React.FC = () => {
       enabled: values.enabled ?? true,
       isDefault: config.models.length === 0,
     };
-    await persist({ ...config, models: [...config.models, model] });
+    const res = await persist({ ...config, models: [...config.models, model] });
+    if (!res.ok) return;
     message.success('模型配置已添加');
     form.resetFields();
   };
@@ -82,15 +83,17 @@ const ModelsPage: React.FC = () => {
   };
 
   const setDefault = async (id: string) => {
-    await persist({
+    const res = await persist({
       ...config,
       models: config.models.map((m) => ({ ...m, isDefault: m.id === id })),
     });
+    if (!res.ok) return;
     message.success('已设为默认模型');
   };
 
   const removeModel = async (id: string) => {
-    await persist({ ...config, models: config.models.filter((m) => m.id !== id) });
+    const res = await persist({ ...config, models: config.models.filter((m) => m.id !== id) });
+    if (!res.ok) return;
     message.success('模型配置已删除');
   };
 
@@ -202,6 +205,14 @@ const ModelsPage: React.FC = () => {
                   <Typography.Text type="secondary" style={{ fontSize: 12 }} copyable>
                     {model.baseUrl}
                   </Typography.Text>
+                  {(() => {
+                    const usage = config.agents.filter((a) => a.modelId === model.id).length;
+                    return usage > 0 ? (
+                      <Tag color="blue" style={{ marginTop: 8 }}>
+                        被 {usage} 个智能体使用
+                      </Tag>
+                    ) : null;
+                  })()}
                 </Card>
               </List.Item>
             )}

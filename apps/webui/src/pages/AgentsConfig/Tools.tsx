@@ -30,10 +30,11 @@ const ToolsPage: React.FC = () => {
   const { config, persist, loading } = useConfig();
 
   const toggleTool = async (name: string, enabled: boolean) => {
-    await persist({
+    const res = await persist({
       ...config,
       tools: config.tools.map((t) => (t.name === name ? { ...t, enabled } : t)),
     });
+    if (!res.ok) return;
     message.success(`${enabled ? '已启用' : '已禁用'}：${name}`);
   };
 
@@ -71,16 +72,22 @@ const ToolsPage: React.FC = () => {
               >
                 <Typography.Paragraph
                   type="secondary"
-                  style={{ marginBottom: 0, minHeight: 44 }}
+                  style={{ marginBottom: 8, minHeight: 44 }}
                 >
                   {tool.description}
                 </Typography.Paragraph>
+                {(() => {
+                  const usage = config.agents.filter((a) => a.tools.includes(tool.name)).length;
+                  return usage > 0 ? (
+                    <Tag color="blue">被 {usage} 个智能体使用</Tag>
+                  ) : null;
+                })()}
               </Card>
             </Col>
           ))}
         </Row>
         <Typography.Text type="secondary" style={{ display: 'block', marginTop: 16 }}>
-          当前为内置工具，开启/关闭状态将随配置保存到 .imooc_claw/imooc_claw.json。
+          当前为内置工具，开启/关闭状态将随配置保存到仓库根目录 CyberClaw.json。
         </Typography.Text>
       </ProCard>
     </PageContainer>

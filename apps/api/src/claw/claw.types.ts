@@ -118,12 +118,12 @@ export const BUILTIN_TOOLS: ClawTool[] = [
   },
 ];
 
-/** 默认配置 */
+/** 默认配置（深拷贝内置工具，避免污染模块级 BUILTIN_TOOLS） */
 export function defaultConfig(): CyberClawConfig {
   return {
     agents: [],
     models: [],
-    tools: BUILTIN_TOOLS,
+    tools: BUILTIN_TOOLS.map((t) => ({ ...t })),
   };
 }
 

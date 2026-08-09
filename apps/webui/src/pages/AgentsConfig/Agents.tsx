@@ -40,6 +40,8 @@ const AgentsPage: React.FC = () => {
 
   const enabledTools = config.tools.filter((t) => t.enabled);
   const enabledModels = config.models.filter((m) => m.enabled);
+  // 用于列表展示：包含已停用的模型（历史关联可能指向已停用模型）
+  const modelMap = new Map(config.models.map((m) => [m.id, m]));
 
   const handleCreate = async (values: AgentFormValues) => {
     const agent: ClawAgent = {
@@ -52,7 +54,8 @@ const AgentsPage: React.FC = () => {
       enabled: values.enabled ?? true,
       createdAt: new Date().toISOString(),
     };
-    await persist({ ...config, agents: [...config.agents, agent] });
+    const res = await persist({ ...config, agents: [...config.agents, agent] });
+    if (!res.ok) return;
     message.success('智能体创建成功');
     form.resetFields();
   };
@@ -65,7 +68,8 @@ const AgentsPage: React.FC = () => {
   };
 
   const removeAgent = async (id: string) => {
-    await persist({ ...config, agents: config.agents.filter((a) => a.id !== id) });
+    const res = await persist({ ...config, agents: config.agents.filter((a) => a.id !== id) });
+    if (!res.ok) return;
     message.success('智能体已删除');
   };
 
@@ -105,7 +109,12 @@ const AgentsPage: React.FC = () => {
           <Form.Item
             name="modelId"
             label="关联大模型"
-            extra={enabledModels.length === 0 ? '请先在「Models」页配置并启用大模型' : undefined}
+            rules={[{ required: true, message: '请选择关联大模型' }]}
+            extra={
+              enabledModels.length === 0
+                ? '请先在「Models」页配置并启用大模型（关联大模型为必填项）'
+                : '关联大模型为必填项'
+            }
           >
             <Select
               placeholder="选择该智能体使用的模型"
@@ -113,7 +122,7 @@ const AgentsPage: React.FC = () => {
                 label: `${m.name} (${m.provider})`,
                 value: m.id,
               }))}
-              allowClear
+              disabled={enabledModels.length === 0}
             />
           </Form.Item>
           <Form.Item
@@ -131,7 +140,12 @@ const AgentsPage: React.FC = () => {
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch checkedChildren="启用" unCheckedChildren="停用" />
           </Form.Item>
-          <Button type="primary" htmlType="submit" icon={<PlusOutlined />}>
+          <Button
+            type="primary"
+            htmlType="submit"
+            icon={<PlusOutlined />}
+            disabled={enabledModels.length === 0}
+          >
             创建智能体
           </Button>
         </Form>
@@ -178,7 +192,15 @@ const AgentsPage: React.FC = () => {
                   <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 8 }}>
                     {agent.description || '暂无描述'}
                   </Typography.Paragraph>
-                  <Space size={[4, 4]} wrap>
+                  <Space size={[4, 4]} wrap style={{ marginBottom: 4 }}>
+                    {(() => {
+                      const model = agent.modelId ? modelMap.get(agent.modelId) : undefined;
+                      return (
+                        <Tag color={model?.enabled ? 'cyan' : 'orange'}>
+                          {model ? `${model.name} · ${model.provider}` : '未关联模型'}
+                        </Tag>
+                      );
+                    })()}
                     {agent.tools.length > 0 ? (
                       agent.tools.map((t) => (
                         <Tag key={t} color="blue">

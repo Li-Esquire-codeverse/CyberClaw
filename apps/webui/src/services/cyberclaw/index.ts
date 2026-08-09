@@ -5,13 +5,14 @@ import { request } from '@umijs/max';
 /**
  * CyberClaw 配置服务
  *
- * 所有配置最终通过接口保存到后端 `.imooc_claw/imooc_claw.json` 文件：
+ * 所有配置最终通过接口保存到后端仓库根目录 `CyberClaw.json`：
  *   GET  /api/claw/config  ->  读取配置
  *   POST /api/claw/config  ->  保存配置
  *
- * 后端项目尚未创建，因此这里做了 localStorage 兜底：
+ * 后端不可用时做了 localStorage 兜底：
  *  - 读取：优先请求后端，失败则回退本地缓存
  *  - 保存：同时写入本地缓存；后端不可用时仅保存在本地并标记 remote=false
+ *  - 后端校验拒绝（4xx，如被引用/必填）时会透出具体错误信息
  */
 
 const LOCAL_CONFIG_KEY = 'cyberclaw.config';
@@ -163,10 +164,10 @@ export async function loadConfig(): Promise<CyberClawConfig> {
   return defaultConfig();
 }
 
-/** 保存配置（写入后端 + 本地兜底） */
+/** 保存配置（写入后端 + 本地兜底；后端拒绝时返回 error） */
 export async function saveConfig(
   config: CyberClawConfig,
-): Promise<{ ok: boolean; remote: boolean }> {
+): Promise<{ ok: boolean; remote: boolean; error?: string }> {
   localStorage.setItem(LOCAL_CONFIG_KEY, JSON.stringify(config));
   try {
     await request('/api/claw/config', {
@@ -175,8 +176,15 @@ export async function saveConfig(
       skipErrorHandler: true,
     });
     return { ok: true, remote: true };
-  } catch (e) {
-    // 后端未就绪：已保存在本地
+  } catch (e: unknown) {
+    const err = e as { data?: { message?: string | string[] }; response?: { data?: { message?: string | string[] } } };
+    const msg = err?.data?.message ?? err?.response?.data?.message;
+    const text = Array.isArray(msg) ? msg.join('；') : msg;
+    if (typeof text === 'string' && text.length > 0) {
+      // 后端明确拒绝了本次保存（如引用校验失败）
+      return { ok: false, remote: false, error: text };
+    }
+    // 网络/连接问题：已保存在本地兜底
     return { ok: true, remote: false };
   }
 }

@@ -25,8 +25,12 @@ export function useConfig() {
 
   const persist = useCallback(
     async (next: CyberClawConfig) => {
-      setConfig(next);
       const res = await saveConfig(next);
+      if (!res.ok) {
+        message.error(res.error || '保存失败，请检查后端服务');
+        return res;
+      }
+      setConfig(next);
       if (res.remote) {
         message.success('配置已保存到 CyberClaw.json');
       } else {
