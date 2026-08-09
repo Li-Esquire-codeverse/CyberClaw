@@ -74,10 +74,26 @@ export class ClawConfigService {
     return defaultConfig();
   }
 
-  /** 原子写入完整配置（串行）；写入前做引用联动校验 */
-  async saveConfig(config: CyberClawConfig): Promise<void> {
+  /**
+   * 原子写入完整配置（串行）；写入前默认做引用联动校验。
+   *
+   * 职责约定：
+   *   - 单资源操作（create、update、delete 系列）都传入 `{ validate: false }`，
+   *     因为各方法内部已对自己涉及的引用做了定向校验（如 createAgent 校验
+   *     新 agent 的 modelId/tools、deleteModel 校验是否被 Agent 引用），
+   *     避免配置中历史遗留的孤儿引用（Agent 指向不存在的 Model/Tool）
+   *     阻塞与本次操作无关的写入。
+   *   - 只有「显式全量提交」（POST /api/claw/config）保留默认全量校验，
+   *     防止整包保存出脏数据。
+   */
+  async saveConfig(
+    config: CyberClawConfig,
+    opts: { validate?: boolean } = {},
+  ): Promise<void> {
     const normalized = normalizeConfig(config);
-    this.validateLinks(normalized);
+    if (opts.validate !== false) {
+      this.validateLinks(normalized);
+    }
     this.writeQueue = this.writeQueue.then(() => this.persist(normalized));
     return this.writeQueue as Promise<void>;
   }
@@ -158,7 +174,7 @@ export class ClawConfigService {
     };
 
     config.agents.push(agent);
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return agent;
   }
 
@@ -200,7 +216,7 @@ export class ClawConfigService {
     };
 
     config.agents[config.agents.indexOf(agent)] = updated;
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return updated;
   }
 
@@ -212,7 +228,8 @@ export class ClawConfigService {
       throw new NotFoundException(`Agent ${id} not found`);
     }
     config.agents.splice(index, 1);
-    await this.saveConfig(config);
+    // 删除只会减少引用，若配置中存在其他历史孤儿引用，不应阻塞本次删除
+    await this.saveConfig(config, { validate: false });
   }
 
   /** 校验 agent 的 modelId / tools 引用是否有效 */
@@ -268,7 +285,7 @@ export class ClawConfigService {
     };
 
     config.models.push(model);
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return model;
   }
 
@@ -308,7 +325,7 @@ export class ClawConfigService {
     }
 
     config.models[config.models.indexOf(model)] = updated;
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return updated;
   }
 
@@ -334,7 +351,9 @@ export class ClawConfigService {
     if (model.isDefault && config.models.length > 0) {
       config.models[0].isDefault = true;
     }
-    await this.saveConfig(config);
+    // 已在上方对被删模型做了「是否被 Agent 引用」的定向检查；
+    // 跳过全量校验，避免历史孤儿引用阻塞本次删除
+    await this.saveConfig(config, { validate: false });
   }
 
   // ==================== Tools 管理 ====================
@@ -368,7 +387,7 @@ export class ClawConfigService {
     };
 
     config.tools.push(tool);
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return tool;
   }
 
@@ -401,7 +420,7 @@ export class ClawConfigService {
     };
 
     config.tools[config.tools.indexOf(tool)] = updated;
-    await this.saveConfig(config);
+    await this.saveConfig(config, { validate: false });
     return updated;
   }
 
@@ -428,6 +447,8 @@ export class ClawConfigService {
     }
 
     config.tools.splice(index, 1);
-    await this.saveConfig(config);
+    // 已在上方对被删工具做了「是否被 Agent 引用」的定向检查；
+    // 跳过全量校验，避免历史孤儿引用阻塞本次删除
+    await this.saveConfig(config, { validate: false });
   }
 }

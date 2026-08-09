@@ -29,6 +29,16 @@ const { TextArea } = Input;
 /** 智能体卡片最多展示的工具 Tag 数，超出折叠为 +N */
 const MAX_TOOL_TAGS = 4;
 
+/** 卡片内标签统一定宽，超出省略号截断，悬浮展示完整文案 */
+const TAG_STYLE: React.CSSProperties = {
+  width: 88,
+  maxWidth: 88,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  marginInlineEnd: 0,
+};
+
 interface AgentFormValues {
   name: string;
   description?: string;
@@ -162,12 +172,13 @@ const AgentsPage: React.FC = () => {
           <Empty description="还没有智能体，先创建一个吧" />
         ) : (
           <List
-            grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
+            grid={{ gutter: 16, column: 3, xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
             dataSource={config.agents}
             renderItem={(agent) => (
               <List.Item>
                 <Card
                   size="small"
+                  style={{ width: '100%', minWidth: 0 }}
                   title={
                     <Space>
                       <RobotOutlined style={{ color: '#1677ff' }} />
@@ -219,66 +230,43 @@ const AgentsPage: React.FC = () => {
                         : '未关联模型';
                       return (
                         <Tooltip title={model ? `${model.name} · ${model.provider}` : undefined}>
-                          <Tag
-                            color={model?.enabled ? 'cyan' : 'orange'}
-                            style={{
-                              maxWidth: 160,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
+                          <Tag color={model?.enabled ? 'cyan' : 'orange'} style={TAG_STYLE}>
                             {modelText}
                           </Tag>
                         </Tooltip>
                       );
                     })()}
                     {agent.tools.length > 0 ? (
-                      <Tooltip
-                        title={agent.tools
-                          .map((t) => toolLabelMap.get(t) ?? t)
-                          .join('、')}
+                      <span
+                        style={{
+                          display: 'flex',
+                          flexWrap: 'nowrap',
+                          overflow: 'hidden',
+                          gap: 4,
+                          minWidth: 0,
+                        }}
                       >
-                        <span
-                          style={{
-                            display: 'flex',
-                            flexWrap: 'nowrap',
-                            overflow: 'hidden',
-                            gap: 4,
-                            minWidth: 0,
-                          }}
-                        >
-                          {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => {
-                            const label = toolLabelMap.get(t) ?? t;
-                            return (
-                              <Tooltip key={t} title={label}>
-                                <Tag
-                                  color="blue"
-                                  style={{
-                                    maxWidth: 96,
-                                    marginInlineEnd: 0,
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap',
-                                  }}
-                                >
-                                  {label}
-                                </Tag>
-                              </Tooltip>
-                            );
-                          })}
-                          {agent.tools.length > MAX_TOOL_TAGS && (
-                            <Tag
-                              color="blue"
-                              style={{ marginInlineEnd: 0, flexShrink: 0 }}
-                            >
-                              +{agent.tools.length - MAX_TOOL_TAGS}
-                            </Tag>
-                          )}
-                        </span>
-                      </Tooltip>
+                        {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => {
+                          const label = toolLabelMap.get(t) ?? t;
+                          return (
+                            <Tooltip key={t} title={label}>
+                              <Tag color="blue" style={TAG_STYLE}>
+                                {label}
+                              </Tag>
+                            </Tooltip>
+                          );
+                        })}
+                        {agent.tools.length > MAX_TOOL_TAGS && (
+                          <Tag
+                            color="blue"
+                            style={{ marginInlineEnd: 0, flexShrink: 0 }}
+                          >
+                            +{agent.tools.length - MAX_TOOL_TAGS}
+                          </Tag>
+                        )}
+                      </span>
                     ) : (
-                      <Tag>未绑定工具</Tag>
+                      <Tag style={TAG_STYLE}>未绑定工具</Tag>
                     )}
                   </div>
                 </Card>

@@ -187,6 +187,101 @@ describe('ClawConfigService', () => {
     await expect(service.deleteModel('mdl_nope')).rejects.toThrow(NotFoundException);
   });
 
+  it('deletes an unreferenced model even when another agent has a dangling model reference', async () => {
+    const modelId = await addModel('standalone');
+
+    // 制造历史遗留「孤儿引用」：一个 agent 指向不存在的模型（模拟手改文件/旧版本遗留）
+    const orphan = service.loadConfig();
+    orphan.agents.push({
+      id: 'ag_ghost',
+      name: 'ghost-agent',
+      modelId: 'mdl_ghost',
+      tools: [],
+      enabled: true,
+    });
+    await service.saveConfig(orphan, { validate: false });
+
+    // 删除一个未被引用的模型：不应被无关的孤儿引用阻塞（原 bug：报「关联的大模型不存在」）
+    await service.deleteModel(modelId);
+    expect(service.getModel(modelId)).toBeUndefined();
+  });
+
+  it('deletes an agent even when another agent has a dangling model reference', async () => {
+    const modelId = await addModel();
+    const agent = await addAgent(modelId, 'normal-agent');
+
+    // 制造历史遗留孤儿引用
+    const orphan = service.loadConfig();
+    orphan.agents.push({
+      id: 'ag_ghost',
+      name: 'ghost-agent',
+      modelId: 'mdl_ghost',
+      tools: [],
+      enabled: true,
+    });
+    await service.saveConfig(orphan, { validate: false });
+
+    // 删除正常 agent：不应被无关孤儿引用阻塞
+    await service.deleteAgent(agent.id);
+    expect(service.getAgent(agent.id)).toBeUndefined();
+  });
+
+  it('creates an agent even when another agent has a dangling model reference', async () => {
+    const modelId = await addModel();
+
+    // 制造历史遗留孤儿引用
+    const orphan = service.loadConfig();
+    orphan.agents.push({
+      id: 'ag_ghost',
+      name: 'ghost-agent',
+      modelId: 'mdl_ghost',
+      tools: [],
+      enabled: true,
+    });
+    await service.saveConfig(orphan, { validate: false });
+
+    // 新建 agent：只校验新 agent 自身引用，不应被孤儿阻塞
+    const agent = await service.createAgent({ name: 'new-agent', modelId, tools: ['web-search'] });
+    expect(service.getAgent(agent.id)?.name).toBe('new-agent');
+  });
+
+  it('updates an agent even when another agent has a dangling model reference', async () => {
+    const modelId = await addModel();
+    const agent = await service.createAgent({ name: 'normal', modelId });
+
+    const orphan = service.loadConfig();
+    orphan.agents.push({
+      id: 'ag_ghost',
+      name: 'ghost-agent',
+      modelId: 'mdl_ghost',
+      tools: [],
+      enabled: true,
+    });
+    await service.saveConfig(orphan, { validate: false });
+
+    const updated = await service.updateAgent(agent.id, { enabled: false });
+    expect(updated.enabled).toBe(false);
+  });
+
+  it('creates a model even when another agent has a dangling model reference', async () => {
+    const orphan = service.loadConfig();
+    orphan.agents.push({
+      id: 'ag_ghost',
+      name: 'ghost-agent',
+      modelId: 'mdl_ghost',
+      tools: [],
+      enabled: true,
+    });
+    await service.saveConfig(orphan, { validate: false });
+
+    const model = await service.createModel({
+      name: 'new-model',
+      model: 'gpt-4o',
+      baseUrl: 'https://api.openai.com/v1',
+    });
+    expect(service.getModel(model.id)).toBeDefined();
+  });
+
   // ==================== Tools ====================
 
   it('creates a custom tool', async () => {

@@ -44,6 +44,16 @@ const PROVIDERS = [
   { label: '自定义 (OpenAI 兼容)', value: 'custom' },
 ];
 
+/** 卡片内标签统一定宽，超出省略号截断，悬浮展示完整文案 */
+const TAG_STYLE: React.CSSProperties = {
+  width: 88,
+  maxWidth: 88,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+  marginInlineEnd: 0,
+};
+
 const DEFAULT_BASE_URLS: Record<string, string> = {
   openai: 'https://api.openai.com/v1',
   deepseek: 'https://api.deepseek.com/v1',
@@ -53,7 +63,7 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 };
 
 const ModelsPage: React.FC = () => {
-  const { config, persist, loading } = useConfig();
+  const { config, setConfig, persist, loading } = useConfig();
   const [form] = Form.useForm<ModelFormValues>();
 
   const handleProviderChange = (provider: string) => {
@@ -167,12 +177,13 @@ const ModelsPage: React.FC = () => {
           <Empty description="还没有模型配置，先添加一个吧" />
         ) : (
           <List
-            grid={{ gutter: 16, xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
+            grid={{ gutter: 16, column: 3, xs: 1, sm: 1, md: 2, lg: 2, xl: 3 }}
             dataSource={config.models}
             renderItem={(model) => (
               <List.Item>
                 <Card
                   size="small"
+                  style={{ width: '100%', minWidth: 0 }}
                   styles={{ body: { overflow: 'hidden', minWidth: 0 } }}
                   title={
                     <Space style={{ maxWidth: '100%' }}>
@@ -180,7 +191,13 @@ const ModelsPage: React.FC = () => {
                       <Typography.Text style={{ maxWidth: 140 }} ellipsis={{ tooltip: model.name }}>
                         {model.name}
                       </Typography.Text>
-                      {model.isDefault && <Tag color="gold">默认</Tag>}
+                      {model.isDefault && (
+                        <Tooltip title="默认模型">
+                          <Tag color="gold" style={TAG_STYLE}>
+                            默认
+                          </Tag>
+                        </Tooltip>
+                      )}
                     </Space>
                   }
                   extra={
@@ -213,7 +230,11 @@ const ModelsPage: React.FC = () => {
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
                     {model.provider} · {model.model}
                   </Typography.Paragraph>
-                  <Tooltip title={model.baseUrl} placement="top">
+                  <Tooltip
+                    title={model.baseUrl}
+                    placement="top"
+                    overlayInnerStyle={{ maxWidth: 420, wordBreak: 'break-all' }}
+                  >
                     <div
                       style={{
                         fontSize: 12,
@@ -222,6 +243,7 @@ const ModelsPage: React.FC = () => {
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
                         maxWidth: '100%',
+                        minWidth: 0,
                       }}
                     >
                       {model.baseUrl}
@@ -230,9 +252,11 @@ const ModelsPage: React.FC = () => {
                   {(() => {
                     const usage = config.agents.filter((a) => a.modelId === model.id).length;
                     return usage > 0 ? (
-                      <Tag color="blue" style={{ marginTop: 8 }}>
-                        被 {usage} 个智能体使用
-                      </Tag>
+                      <Tooltip title={`被 ${usage} 个智能体使用`}>
+                        <Tag color="blue" style={{ ...TAG_STYLE, marginTop: 8 }}>
+                          被 {usage} 个智能体使用
+                        </Tag>
+                      </Tooltip>
                     ) : null;
                   })()}
                 </Card>

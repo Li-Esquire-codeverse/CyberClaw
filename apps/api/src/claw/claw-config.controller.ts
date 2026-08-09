@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Post } from '@nestjs/common';
 import { ClawConfigService } from './claw-config.service';
 import type { CyberClawConfig } from './claw.types';
+import { SaveConfigDto } from './save-config.dto';
 
 /**
  * 全量配置读写接口（前端 webui 契约）
@@ -20,8 +21,8 @@ export class ClawConfigController {
   }
 
   @Post()
-  async saveConfig(@Body() config: CyberClawConfig): Promise<{ ok: true }> {
-    await this.configService.saveConfig(config);
+  async saveConfig(@Body() config: SaveConfigDto): Promise<{ ok: true }> {
+    await this.configService.saveConfig(config as CyberClawConfig);
     return { ok: true };
   }
 }
