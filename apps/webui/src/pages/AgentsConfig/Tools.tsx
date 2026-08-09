@@ -73,6 +73,7 @@ const ToolsPage: React.FC = () => {
                 <Typography.Paragraph
                   type="secondary"
                   style={{ marginBottom: 8, minHeight: 44 }}
+                  ellipsis={{ tooltip: tool.description }}
                 >
                   {tool.description}
                 </Typography.Paragraph>

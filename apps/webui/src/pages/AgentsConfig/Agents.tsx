@@ -16,6 +16,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -24,6 +25,9 @@ import { ClawAgent } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
 
 const { TextArea } = Input;
+
+/** 智能体卡片最多展示的工具 Tag 数，超出折叠为 +N */
+const MAX_TOOL_TAGS = 4;
 
 interface AgentFormValues {
   name: string;
@@ -189,24 +193,39 @@ const AgentsPage: React.FC = () => {
                     </Space>
                   }
                 >
-                  <Typography.Paragraph type="secondary" ellipsis={{ rows: 2 }} style={{ marginBottom: 8 }}>
+                  <Typography.Paragraph
+                    type="secondary"
+                    ellipsis={{ rows: 2, tooltip: agent.description || '暂无描述' }}
+                    style={{ marginBottom: 8 }}
+                  >
                     {agent.description || '暂无描述'}
                   </Typography.Paragraph>
                   <Space size={[4, 4]} wrap style={{ marginBottom: 4 }}>
                     {(() => {
                       const model = agent.modelId ? modelMap.get(agent.modelId) : undefined;
                       return (
-                        <Tag color={model?.enabled ? 'cyan' : 'orange'}>
-                          {model ? `${model.name} · ${model.provider}` : '未关联模型'}
-                        </Tag>
+                        <Tooltip
+                          title={model ? `${model.name} · ${model.provider}` : undefined}
+                        >
+                          <Tag color={model?.enabled ? 'cyan' : 'orange'}>
+                            {model ? `${model.name} · ${model.provider}` : '未关联模型'}
+                          </Tag>
+                        </Tooltip>
                       );
                     })()}
                     {agent.tools.length > 0 ? (
-                      agent.tools.map((t) => (
-                        <Tag key={t} color="blue">
-                          {t}
-                        </Tag>
-                      ))
+                      <>
+                        {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => (
+                          <Tag key={t} color="blue">
+                            {t}
+                          </Tag>
+                        ))}
+                        {agent.tools.length > MAX_TOOL_TAGS && (
+                          <Tooltip title={agent.tools.join('、')}>
+                            <Tag color="blue">+{agent.tools.length - MAX_TOOL_TAGS}</Tag>
+                          </Tooltip>
+                        )}
+                      </>
                     ) : (
                       <Tag>未绑定工具</Tag>
                     )}

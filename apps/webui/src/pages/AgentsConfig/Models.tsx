@@ -202,7 +202,12 @@ const ModelsPage: React.FC = () => {
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
                     {model.provider} · {model.model}
                   </Typography.Paragraph>
-                  <Typography.Text type="secondary" style={{ fontSize: 12 }} copyable>
+                  <Typography.Text
+                    type="secondary"
+                    style={{ fontSize: 12, display: 'block' }}
+                    ellipsis={{ tooltip: model.baseUrl }}
+                    copyable
+                  >
                     {model.baseUrl}
                   </Typography.Text>
                   {(() => {
