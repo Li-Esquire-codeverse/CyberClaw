@@ -18,6 +18,7 @@ import {
   Space,
   Switch,
   Tag,
+  Tooltip,
   Typography,
   message,
 } from 'antd';
@@ -202,14 +203,20 @@ const ModelsPage: React.FC = () => {
                   <Typography.Paragraph type="secondary" style={{ marginBottom: 4 }}>
                     {model.provider} · {model.model}
                   </Typography.Paragraph>
-                  <Typography.Text
-                    type="secondary"
-                    style={{ fontSize: 12, display: 'block' }}
-                    ellipsis={{ tooltip: model.baseUrl }}
-                    copyable
-                  >
-                    {model.baseUrl}
-                  </Typography.Text>
+                  <Tooltip title={model.baseUrl} placement="top">
+                    <Typography.Text
+                      type="secondary"
+                      style={{
+                        fontSize: 12,
+                        display: 'block',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {model.baseUrl}
+                    </Typography.Text>
+                  </Tooltip>
                   {(() => {
                     const usage = config.agents.filter((a) => a.modelId === model.id).length;
                     return usage > 0 ? (

@@ -46,6 +46,8 @@ const AgentsPage: React.FC = () => {
   const enabledModels = config.models.filter((m) => m.enabled);
   // 用于列表展示：包含已停用的模型（历史关联可能指向已停用模型）
   const modelMap = new Map(config.models.map((m) => [m.id, m]));
+  // 工具名 -> 显示名（工具区展示更短的 label）
+  const toolLabelMap = new Map(config.tools.map((t) => [t.name, t.label]));
 
   const handleCreate = async (values: AgentFormValues) => {
     const agent: ClawAgent = {
@@ -200,36 +202,68 @@ const AgentsPage: React.FC = () => {
                   >
                     {agent.description || '暂无描述'}
                   </Typography.Paragraph>
-                  <Space size={[4, 4]} wrap style={{ marginBottom: 4 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'nowrap',
+                      overflow: 'hidden',
+                      gap: 4,
+                      marginBottom: 4,
+                      minWidth: 0,
+                    }}
+                  >
                     {(() => {
                       const model = agent.modelId ? modelMap.get(agent.modelId) : undefined;
+                      const modelText = model
+                        ? `${model.name} · ${model.provider}`
+                        : '未关联模型';
                       return (
-                        <Tooltip
-                          title={model ? `${model.name} · ${model.provider}` : undefined}
-                        >
-                          <Tag color={model?.enabled ? 'cyan' : 'orange'}>
-                            {model ? `${model.name} · ${model.provider}` : '未关联模型'}
+                        <Tooltip title={model ? `${model.name} · ${model.provider}` : undefined}>
+                          <Tag
+                            color={model?.enabled ? 'cyan' : 'orange'}
+                            style={{
+                              maxWidth: 160,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {modelText}
                           </Tag>
                         </Tooltip>
                       );
                     })()}
                     {agent.tools.length > 0 ? (
-                      <>
-                        {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => (
-                          <Tag key={t} color="blue">
-                            {t}
-                          </Tag>
-                        ))}
-                        {agent.tools.length > MAX_TOOL_TAGS && (
-                          <Tooltip title={agent.tools.join('、')}>
-                            <Tag color="blue">+{agent.tools.length - MAX_TOOL_TAGS}</Tag>
-                          </Tooltip>
-                        )}
-                      </>
+                      <Tooltip
+                        title={agent.tools
+                          .map((t) => toolLabelMap.get(t) ?? t)
+                          .join('、')}
+                      >
+                        <span
+                          style={{
+                            display: 'flex',
+                            flexWrap: 'nowrap',
+                            overflow: 'hidden',
+                            gap: 4,
+                            minWidth: 0,
+                          }}
+                        >
+                          {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => (
+                            <Tag key={t} color="blue">
+                              {toolLabelMap.get(t) ?? t}
+                            </Tag>
+                          ))}
+                          {agent.tools.length > MAX_TOOL_TAGS && (
+                            <Tag color="blue">
+                              +{agent.tools.length - MAX_TOOL_TAGS}
+                            </Tag>
+                          )}
+                        </span>
+                      </Tooltip>
                     ) : (
                       <Tag>未绑定工具</Tag>
                     )}
-                  </Space>
+                  </div>
                 </Card>
               </List.Item>
             )}
