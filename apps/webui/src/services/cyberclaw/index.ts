@@ -188,3 +188,32 @@ export async function saveConfig(
     return { ok: true, remote: false };
   }
 }
+
+/** 提取后端错误信息（优先 data.message，兼容数组） */
+function extractErrorMessage(e: unknown): string | undefined {
+  const err = e as {
+    data?: { message?: string | string[] };
+    response?: { data?: { message?: string | string[] } };
+  };
+  const msg = err?.data?.message ?? err?.response?.data?.message;
+  const text = Array.isArray(msg) ? msg.join('；') : msg;
+  return typeof text === 'string' && text.length > 0 ? text : undefined;
+}
+
+/**
+ * 删除模型（走单资源接口，联动校验失败时返回 409 友好提示）
+ * 被智能体引用时后端会拒绝删除，返回 ok:false + error 说明
+ */
+export async function deleteModelApi(
+  id: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await request(`/api/claw/models/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      skipErrorHandler: true,
+    });
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: extractErrorMessage(e) ?? '删除失败' };
+  }
+}

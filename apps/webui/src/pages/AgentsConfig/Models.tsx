@@ -24,6 +24,7 @@ import {
 } from 'antd';
 import React from 'react';
 import { ClawModel } from '@/services/cyberclaw';
+import { deleteModelApi, loadConfig } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
 
 interface ModelFormValues {
@@ -93,8 +94,14 @@ const ModelsPage: React.FC = () => {
   };
 
   const removeModel = async (id: string) => {
-    const res = await persist({ ...config, models: config.models.filter((m) => m.id !== id) });
-    if (!res.ok) return;
+    const res = await deleteModelApi(id);
+    if (!res.ok) {
+      message.error(res.error || '删除失败');
+      return;
+    }
+    // 走单资源接口删除成功，重新拉取后端最新配置
+    const fresh = await loadConfig();
+    setConfig(fresh);
     message.success('模型配置已删除');
   };
 
@@ -166,10 +173,13 @@ const ModelsPage: React.FC = () => {
               <List.Item>
                 <Card
                   size="small"
+                  styles={{ body: { overflow: 'hidden', minWidth: 0 } }}
                   title={
-                    <Space>
+                    <Space style={{ maxWidth: '100%' }}>
                       <ApiOutlined style={{ color: '#1677ff' }} />
-                      {model.name}
+                      <Typography.Text style={{ maxWidth: 140 }} ellipsis={{ tooltip: model.name }}>
+                        {model.name}
+                      </Typography.Text>
                       {model.isDefault && <Tag color="gold">默认</Tag>}
                     </Space>
                   }
@@ -204,18 +214,18 @@ const ModelsPage: React.FC = () => {
                     {model.provider} · {model.model}
                   </Typography.Paragraph>
                   <Tooltip title={model.baseUrl} placement="top">
-                    <Typography.Text
-                      type="secondary"
+                    <div
                       style={{
                         fontSize: 12,
-                        display: 'block',
+                        color: 'rgba(0, 0, 0, 0.45)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        maxWidth: '100%',
                       }}
                     >
                       {model.baseUrl}
-                    </Typography.Text>
+                    </div>
                   </Tooltip>
                   {(() => {
                     const usage = config.agents.filter((a) => a.modelId === model.id).length;

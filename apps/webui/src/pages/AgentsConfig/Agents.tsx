@@ -248,13 +248,30 @@ const AgentsPage: React.FC = () => {
                             minWidth: 0,
                           }}
                         >
-                          {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => (
-                            <Tag key={t} color="blue">
-                              {toolLabelMap.get(t) ?? t}
-                            </Tag>
-                          ))}
+                          {agent.tools.slice(0, MAX_TOOL_TAGS).map((t) => {
+                            const label = toolLabelMap.get(t) ?? t;
+                            return (
+                              <Tooltip key={t} title={label}>
+                                <Tag
+                                  color="blue"
+                                  style={{
+                                    maxWidth: 96,
+                                    marginInlineEnd: 0,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {label}
+                                </Tag>
+                              </Tooltip>
+                            );
+                          })}
                           {agent.tools.length > MAX_TOOL_TAGS && (
-                            <Tag color="blue">
+                            <Tag
+                              color="blue"
+                              style={{ marginInlineEnd: 0, flexShrink: 0 }}
+                            >
                               +{agent.tools.length - MAX_TOOL_TAGS}
                             </Tag>
                           )}
