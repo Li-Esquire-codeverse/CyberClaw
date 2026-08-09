@@ -12,6 +12,10 @@ out/
 .env.*
 !.env.example
 
+# ===== Runtime config (contains apiKeys) =====
+CyberClaw.json
+!CyberClaw.example.json
+
 # ===== Logs =====
 *.log
 npm-debug.log*

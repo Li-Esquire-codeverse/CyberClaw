@@ -1,0 +1,70 @@
+{
+  "agents": [],
+  "models": [],
+  "tools": [
+    {
+      "name": "web-search",
+      "label": "网页搜索",
+      "description": "通过搜索引擎检索互联网信息，用于回答时效性问题。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "search"
+    },
+    {
+      "name": "browser",
+      "label": "浏览器控制",
+      "description": "控制无头浏览器访问网页、抓取内容、模拟用户操作。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "chrome"
+    },
+    {
+      "name": "file-ops",
+      "label": "文件操作",
+      "description": "读写、创建、移动、删除本地文件与目录。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "folder"
+    },
+    {
+      "name": "shell",
+      "label": "命令执行",
+      "description": "在本地执行 shell 命令，自动化完成系统级任务。",
+      "builtin": true,
+      "enabled": false,
+      "icon": "console-sql"
+    },
+    {
+      "name": "memory",
+      "label": "记忆管理",
+      "description": "长期记忆的写入、检索与管理，跨会话保持上下文。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "database"
+    },
+    {
+      "name": "code-interpreter",
+      "label": "代码解释器",
+      "description": "在沙箱中运行 Python / JS 代码片段并返回执行结果。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "code"
+    },
+    {
+      "name": "image-gen",
+      "label": "图片生成",
+      "description": "根据文本描述生成图片（接入文生图模型）。",
+      "builtin": true,
+      "enabled": false,
+      "icon": "picture"
+    },
+    {
+      "name": "translate",
+      "label": "翻译",
+      "description": "多语言互译，支持自动检测源语言。",
+      "builtin": true,
+      "enabled": true,
+      "icon": "translation"
+    }
+  ]
+}
