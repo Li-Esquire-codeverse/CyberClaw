@@ -28,7 +28,7 @@ export function useConfig() {
       setConfig(next);
       const res = await saveConfig(next);
       if (res.remote) {
-        message.success('配置已保存到 .imooc_claw/imooc_claw.json');
+        message.success('配置已保存到 CyberClaw.json');
       } else {
         message.warning('后端未连接，配置已保存到本地（接入后端后将同步保存）');
       }
