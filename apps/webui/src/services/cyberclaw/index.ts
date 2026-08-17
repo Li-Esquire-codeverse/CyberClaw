@@ -217,3 +217,47 @@ export async function deleteModelApi(
     return { ok: false, error: extractErrorMessage(e) ?? '删除失败' };
   }
 }
+
+/**
+ * 更新智能体（走单资源接口 PUT，只传需要修改的字段）
+ * 后端会做重名（409）与 modelId/tools 引用（422）校验，错误原样透出
+ */
+export async function updateAgentApi(
+  id: string,
+  patch: Partial<
+    Pick<ClawAgent, 'name' | 'description' | 'systemPrompt' | 'modelId' | 'tools' | 'enabled'>
+  >,
+): Promise<{ ok: boolean; data?: ClawAgent; error?: string }> {
+  try {
+    const data = await request<ClawAgent>(`/api/claw/agents/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      data: patch,
+      skipErrorHandler: true,
+    });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: extractErrorMessage(e) ?? '更新失败' };
+  }
+}
+
+/**
+ * 更新模型（走单资源接口 PUT，只传需要修改的字段）
+ * 后端会做重名（409）校验；设为默认时自动清除其他模型的默认标记
+ */
+export async function updateModelApi(
+  id: string,
+  patch: Partial<
+    Pick<ClawModel, 'name' | 'provider' | 'model' | 'baseUrl' | 'apiKey' | 'enabled' | 'isDefault'>
+  >,
+): Promise<{ ok: boolean; data?: ClawModel; error?: string }> {
+  try {
+    const data = await request<ClawModel>(`/api/claw/models/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      data: patch,
+      skipErrorHandler: true,
+    });
+    return { ok: true, data };
+  } catch (e) {
+    return { ok: false, error: extractErrorMessage(e) ?? '更新失败' };
+  }
+}

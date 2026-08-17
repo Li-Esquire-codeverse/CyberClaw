@@ -3,6 +3,9 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
+    // npm-workspaces 下曾有 react 18/19 双副本（根 18 为历史遗留，icons/plots 等 peer
+    // 实际都兼容 19），已通过 npm install react@19 收敛为单实例；dedupe 兜底防止回退
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime', 'react-dom/client'],
     alias: {
       '@': join(__dirname, 'src'),
       '@root': join(__dirname),

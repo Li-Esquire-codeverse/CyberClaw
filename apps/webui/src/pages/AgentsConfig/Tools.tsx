@@ -12,7 +12,7 @@ import {
 import { PageContainer, ProCard } from '@ant-design/pro-components';
 import { Card, Col, Row, Space, Switch, Tag, Typography, message } from 'antd';
 import React from 'react';
-import { ClawTool } from '@/services/cyberclaw';
+import type { ClawTool } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
 
 const ICON_MAP: Record<string, React.ReactNode> = {

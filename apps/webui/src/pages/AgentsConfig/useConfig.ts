@@ -1,7 +1,7 @@
 import { message } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
 import {
-  CyberClawConfig,
+  type CyberClawConfig,
   defaultConfig,
   loadConfig,
   saveConfig,

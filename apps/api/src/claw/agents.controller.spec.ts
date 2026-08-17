@@ -61,9 +61,18 @@ describe('AgentsController', () => {
 
   it('updates an agent', async () => {
     service.updateAgent.mockResolvedValue({ ...sampleAgent, enabled: false });
-    await expect(controller.update('ag_abc123', { enabled: false })).resolves.toMatchObject({
+    const dto = { name: 'renamed', enabled: false };
+    await expect(controller.update('ag_abc123', dto)).resolves.toMatchObject({
       enabled: false,
     });
+    expect(service.updateAgent).toHaveBeenCalledWith('ag_abc123', dto);
+  });
+
+  it('propagates reference validation errors on update', async () => {
+    service.updateAgent.mockRejectedValue(new ConflictException('关联的工具不存在: nope'));
+    await expect(
+      controller.update('ag_abc123', { tools: ['nope'] }),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('deletes an agent', async () => {

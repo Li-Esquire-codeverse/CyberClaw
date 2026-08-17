@@ -64,9 +64,18 @@ describe('ModelsController', () => {
 
   it('updates a model', async () => {
     service.updateModel.mockResolvedValue({ ...sampleModel, isDefault: false });
-    await expect(controller.update('mdl_abc123', { isDefault: false })).resolves.toMatchObject({
+    const dto = { apiKey: 'sk-new', isDefault: false };
+    await expect(controller.update('mdl_abc123', dto)).resolves.toMatchObject({
       isDefault: false,
     });
+    expect(service.updateModel).toHaveBeenCalledWith('mdl_abc123', dto);
+  });
+
+  it('propagates name conflicts on update', async () => {
+    service.updateModel.mockRejectedValue(new ConflictException('already exists'));
+    await expect(
+      controller.update('mdl_abc123', { name: 'dup' }),
+    ).rejects.toThrow(ConflictException);
   });
 
   it('propagates conflicts from the service', async () => {

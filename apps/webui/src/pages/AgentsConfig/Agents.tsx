@@ -1,5 +1,6 @@
 import {
   DeleteOutlined,
+  EditOutlined,
   PlusOutlined,
   RobotOutlined,
 } from '@ant-design/icons';
@@ -11,6 +12,7 @@ import {
   Form,
   Input,
   List,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -20,8 +22,8 @@ import {
   Typography,
   message,
 } from 'antd';
-import React from 'react';
-import { ClawAgent } from '@/services/cyberclaw';
+import React, { useEffect, useState } from 'react';
+import { type ClawAgent, loadConfig, updateAgentApi } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
 
 const { TextArea } = Input;
@@ -49,8 +51,11 @@ interface AgentFormValues {
 }
 
 const AgentsPage: React.FC = () => {
-  const { config, persist, loading } = useConfig();
+  const { config, setConfig, persist, loading } = useConfig();
   const [form] = Form.useForm<AgentFormValues>();
+  const [editingAgent, setEditingAgent] = useState<ClawAgent | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editForm] = Form.useForm<AgentFormValues>();
 
   const enabledTools = config.tools.filter((t) => t.enabled);
   const enabledModels = config.models.filter((m) => m.enabled);
@@ -87,6 +92,41 @@ const AgentsPage: React.FC = () => {
     const res = await persist({ ...config, agents: config.agents.filter((a) => a.id !== id) });
     if (!res.ok) return;
     message.success('智能体已删除');
+  };
+
+  const openEdit = (agent: ClawAgent) => {
+    setEditingAgent(agent);
+  };
+
+  // Modal 内容在 destroyOnHidden 下异步挂载，需在渲染完成后预填表单
+  useEffect(() => {
+    if (editingAgent) {
+      editForm.setFieldsValue({
+        name: editingAgent.name,
+        description: editingAgent.description,
+        systemPrompt: editingAgent.systemPrompt,
+        modelId: editingAgent.modelId,
+        tools: editingAgent.tools,
+        enabled: editingAgent.enabled,
+      });
+    }
+  }, [editingAgent, editForm]);
+
+  const handleEditFinish = async (values: AgentFormValues) => {
+    if (!editingAgent) return;
+    setSaving(true);
+    const res = await updateAgentApi(editingAgent.id, values);
+    setSaving(false);
+    if (!res.ok) {
+      message.error(res.error || '更新失败');
+      return;
+    }
+    setEditingAgent(null);
+    editForm.resetFields();
+    // 走单资源接口更新成功后，重新拉取后端最新配置
+    const fresh = await loadConfig();
+    setConfig(fresh);
+    message.success('智能体已更新');
   };
 
   return (
@@ -192,6 +232,13 @@ const AgentsPage: React.FC = () => {
                         checked={agent.enabled}
                         onChange={(checked) => toggleAgent(agent.id, checked)}
                       />
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => openEdit(agent)}
+                        aria-label={`编辑 ${agent.name}`}
+                      />
                       <Popconfirm
                         title="确认删除该智能体？"
                         onConfirm={() => removeAgent(agent.id)}
@@ -275,6 +322,64 @@ const AgentsPage: React.FC = () => {
           />
         )}
       </ProCard>
+
+      <Modal
+        title="编辑智能体"
+        open={!!editingAgent}
+        onOk={() => editForm.submit()}
+        onCancel={() => {
+          setEditingAgent(null);
+          editForm.resetFields();
+        }}
+        confirmLoading={saving}
+        destroyOnHidden
+      >
+        <Form<AgentFormValues>
+          form={editForm}
+          layout="vertical"
+          onFinish={handleEditFinish}
+        >
+          <Form.Item
+            name="name"
+            label="智能体名称"
+            rules={[{ required: true, message: '请输入智能体名称' }]}
+          >
+            <Input placeholder="例如：代码助手" maxLength={50} />
+          </Form.Item>
+          <Form.Item name="description" label="描述">
+            <Input placeholder="简单描述这个智能体的用途" maxLength={200} />
+          </Form.Item>
+          <Form.Item name="systemPrompt" label="系统提示词（System Prompt）">
+            <TextArea rows={4} placeholder="设定智能体的角色、行为准则与能力边界…" />
+          </Form.Item>
+          <Form.Item
+            name="modelId"
+            label="关联大模型"
+            rules={[{ required: true, message: '请选择关联大模型' }]}
+            extra={enabledModels.length === 0 ? '请先在「Models」页配置并启用大模型' : undefined}
+          >
+            <Select
+              placeholder="选择该智能体使用的模型"
+              options={enabledModels.map((m) => ({
+                label: `${m.name} (${m.provider})`,
+                value: m.id,
+              }))}
+              disabled={enabledModels.length === 0}
+            />
+          </Form.Item>
+          <Form.Item name="tools" label="可用工具">
+            <Select
+              mode="multiple"
+              placeholder="选择该智能体可调用的工具"
+              options={enabledTools.map((t) => ({ label: t.label, value: t.name }))}
+              allowClear
+            />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用" valuePropName="checked">
+            <Switch checkedChildren="启用" unCheckedChildren="停用" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </PageContainer>
   );
 };

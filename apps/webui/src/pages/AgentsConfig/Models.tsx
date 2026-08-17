@@ -1,6 +1,7 @@
 import {
   ApiOutlined,
   DeleteOutlined,
+  EditOutlined,
   PlusOutlined,
   StarFilled,
   StarOutlined,
@@ -13,6 +14,7 @@ import {
   Form,
   Input,
   List,
+  Modal,
   Popconfirm,
   Select,
   Space,
@@ -22,8 +24,8 @@ import {
   Typography,
   message,
 } from 'antd';
-import React from 'react';
-import { ClawModel } from '@/services/cyberclaw';
+import React, { useEffect, useState } from 'react';
+import { type ClawModel, updateModelApi } from '@/services/cyberclaw';
 import { deleteModelApi, loadConfig } from '@/services/cyberclaw';
 import { useConfig } from './useConfig';
 
@@ -65,6 +67,9 @@ const DEFAULT_BASE_URLS: Record<string, string> = {
 const ModelsPage: React.FC = () => {
   const { config, setConfig, persist, loading } = useConfig();
   const [form] = Form.useForm<ModelFormValues>();
+  const [editingModel, setEditingModel] = useState<ClawModel | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [editForm] = Form.useForm<ModelFormValues>();
 
   const handleProviderChange = (provider: string) => {
     form.setFieldsValue({ baseUrl: DEFAULT_BASE_URLS[provider] || '' });
@@ -113,6 +118,45 @@ const ModelsPage: React.FC = () => {
     const fresh = await loadConfig();
     setConfig(fresh);
     message.success('模型配置已删除');
+  };
+
+  const openEdit = (model: ClawModel) => {
+    setEditingModel(model);
+  };
+
+  // Modal 内容在 destroyOnHidden 下异步挂载，需在渲染完成后预填表单
+  useEffect(() => {
+    if (editingModel) {
+      editForm.setFieldsValue({
+        provider: editingModel.provider,
+        name: editingModel.name,
+        baseUrl: editingModel.baseUrl,
+        apiKey: editingModel.apiKey || '',
+        model: editingModel.model,
+        enabled: editingModel.enabled,
+      });
+    }
+  }, [editingModel, editForm]);
+
+  const handleEditProviderChange = (provider: string) => {
+    editForm.setFieldsValue({ baseUrl: DEFAULT_BASE_URLS[provider] || '' });
+  };
+
+  const handleEditFinish = async (values: ModelFormValues) => {
+    if (!editingModel) return;
+    setSaving(true);
+    const res = await updateModelApi(editingModel.id, values);
+    setSaving(false);
+    if (!res.ok) {
+      message.error(res.error || '更新失败');
+      return;
+    }
+    setEditingModel(null);
+    editForm.resetFields();
+    // 走单资源接口更新成功后，重新拉取后端最新配置
+    const fresh = await loadConfig();
+    setConfig(fresh);
+    message.success('模型配置已更新');
   };
 
   return (
@@ -210,6 +254,13 @@ const ModelsPage: React.FC = () => {
                       <Button
                         type="text"
                         size="small"
+                        icon={<EditOutlined />}
+                        onClick={() => openEdit(model)}
+                        aria-label={`编辑 ${model.name}`}
+                      />
+                      <Button
+                        type="text"
+                        size="small"
                         icon={model.isDefault ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
                         onClick={() => setDefault(model.id)}
                       />
@@ -265,6 +316,59 @@ const ModelsPage: React.FC = () => {
           />
         )}
       </ProCard>
+
+      <Modal
+        title="编辑模型"
+        open={!!editingModel}
+        onOk={() => editForm.submit()}
+        onCancel={() => {
+          setEditingModel(null);
+          editForm.resetFields();
+        }}
+        confirmLoading={saving}
+        destroyOnHidden
+      >
+        <Form<ModelFormValues>
+          form={editForm}
+          layout="vertical"
+          onFinish={handleEditFinish}
+        >
+          <Form.Item
+            name="provider"
+            label="服务商"
+            rules={[{ required: true, message: '请选择服务商' }]}
+          >
+            <Select options={PROVIDERS} onChange={handleEditProviderChange} />
+          </Form.Item>
+          <Form.Item
+            name="name"
+            label="配置名称"
+            rules={[{ required: true, message: '请输入配置名称' }]}
+          >
+            <Input placeholder="例如：生产 DeepSeek" maxLength={50} />
+          </Form.Item>
+          <Form.Item
+            name="baseUrl"
+            label="Base URL"
+            rules={[{ required: true, message: '请输入接口地址' }]}
+          >
+            <Input placeholder="https://api.deepseek.com/v1" />
+          </Form.Item>
+          <Form.Item name="apiKey" label="API Key">
+            <Input.Password placeholder="sk-…" autoComplete="new-password" />
+          </Form.Item>
+          <Form.Item
+            name="model"
+            label="模型名称"
+            rules={[{ required: true, message: '请输入模型名称' }]}
+          >
+            <Input placeholder="例如：deepseek-chat / gpt-4o" />
+          </Form.Item>
+          <Form.Item name="enabled" label="启用" valuePropName="checked">
+            <Switch checkedChildren="启用" unCheckedChildren="停用" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </PageContainer>
   );
 };
