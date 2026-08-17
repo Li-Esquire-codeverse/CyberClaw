@@ -1,5 +1,5 @@
 import { ChatOpenAI } from '@langchain/openai';
-import { createReactAgent } from '@langchain/langgraph/prebuilt';
+import { createAgent, type CreateAgentParams } from 'langchain';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { DynamicStructuredToolInput, StructuredToolInterface } from '@langchain/core/tools';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
@@ -45,16 +45,13 @@ export interface CreateLangchainAgentOptions {
   extraTools?: StructuredToolInterface[];
   /** 自定义 LLM 工厂（默认用 ChatOpenAI 对接 baseUrl；测试可注入 fake 模型） */
   llmFactory?: (model: ClawModel) => BaseChatModel;
-  /** 透传给 createReactAgent 的额外参数 */
-  agentOptions?: Omit<
-    Parameters<typeof createReactAgent>[0],
-    'llm' | 'tools' | 'prompt'
-  >;
+  /** 透传给 createAgent 的额外参数 */
+  agentOptions?: Omit<CreateAgentParams, 'model' | 'tools' | 'systemPrompt'>;
 }
 
 export interface CreatedLangchainAgent {
-  /** 编译后的 ReAct agent（langgraph） */
-  agent: ReturnType<typeof createReactAgent>;
+  /** 编译后的 agent（langgraph ReactAgent，由 createAgent 生成） */
+  agent: ReturnType<typeof createAgent>;
   /** 实际选用的模型配置 */
   model: ClawModel;
   /** langchain chat model 实例 */
@@ -111,7 +108,7 @@ export function toLangchainTool(
 }
 
 /**
- * 使用 langchain + 配置文件中的模型/工具配置创建 ReAct agent。
+ * 使用 langchain + 配置文件中的模型/工具配置创建 agent（默认 tool-calling 策略）。
  *
  * 用法：
  *   const { agent } = await createLangchainAgent({
@@ -150,11 +147,12 @@ export async function createLangchainAgent(
     options.systemPrompt ??
     enabledAgent?.systemPrompt?.trim() ??
     DEFAULT_SYSTEM_PROMPT;
+  
 
-  const agent = createReactAgent({
-    llm: chatModel,
+  const agent = createAgent({
+    model: chatModel,
     tools,
-    prompt: systemPrompt,
+    systemPrompt,
     ...options.agentOptions,
   });
 

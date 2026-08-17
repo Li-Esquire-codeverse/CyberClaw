@@ -35,6 +35,7 @@
   "dependencies": {
     "@langchain/core": "^1.2.8",
     "@langchain/langgraph": "^1.4.10",
-    "@langchain/openai": "^1.5.8"
+    "@langchain/openai": "^1.5.8",
+    "langchain": "^1.5.9"
   }
 }

@@ -77,6 +77,7 @@ export function findRepoRoot(cwd = process.cwd()): string | undefined {
       } catch {
         // package.json 损坏则跳过继续向上
       }
+
     }
     const parent = dirname(dir);
     if (parent === dir) return undefined;
@@ -116,6 +117,7 @@ export function loadConfig(options: LoadConfigOptions = {}): ClawConfigFile {
 
 /** 启用中的模型列表 */
 export function getEnabledModels(config: ClawConfigFile): ClawModel[] {
+
   return config.models.filter((m) => m.enabled);
 }
 
