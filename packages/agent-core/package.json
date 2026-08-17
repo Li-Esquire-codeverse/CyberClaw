@@ -1,0 +1,28 @@
+{
+  "name": "@cyberclaw/agent-core",
+  "version": "0.1.0",
+  "description": "CyberClaw 智能体核心包：Agent 最小可运行循环（systemPrompt + model + tools）",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "keywords": ["cyberclaw", "agent", "llm", "ai"],
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^7.0.0",
+    "vitest": "^4.0.0"
+  }
+}
