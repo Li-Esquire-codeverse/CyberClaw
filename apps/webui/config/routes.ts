@@ -325,7 +325,7 @@ export default [
   },
   {
     path: '/',
-    redirect: '/dashboard/analysis',
+    redirect: '/agents-config/agents',
   },
   {
     component: './exception/404',
