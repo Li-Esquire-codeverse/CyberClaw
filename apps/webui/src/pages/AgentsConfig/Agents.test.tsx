@@ -21,7 +21,12 @@ vi.mock('@/services/cyberclaw', () => ({
 }));
 
 vi.mock('@ant-design/pro-components', () => ({
-  PageContainer: ({ children }: any) => <div>{children}</div>,
+  PageContainer: ({ children, extra }: any) => (
+    <div>
+      {extra}
+      {children}
+    </div>
+  ),
   ProCard: ({ children, title }: any) => (
     <div>
       <div>{title}</div>
@@ -165,5 +170,80 @@ describe('AgentsPage 编辑功能', () => {
     expect(within(screen.getByRole('dialog')).getByLabelText('智能体名称')).toBeInTheDocument();
     // 失败不应触发刷新
     expect(mockLoadConfig).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentsPage 创建流程（按钮展开）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockLoadConfig.mockResolvedValue(baseConfig);
+    mockSaveConfig.mockResolvedValue({ ok: true, remote: true });
+  });
+
+  it('进入页面时不显示创建表单，点击新增按钮后展开', async () => {
+    render(<AgentsPage />);
+    await screen.findByText('法律助手');
+    // 默认不渲染创建表单
+    expect(screen.queryByLabelText('智能体名称')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /保存/ })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /新增智能体/ }));
+    expect(await screen.findByLabelText('智能体名称')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /保存/ })).toBeInTheDocument();
+  });
+
+  it('必填项缺失时保存被表单校验拦截', async () => {
+    render(<AgentsPage />);
+    fireEvent.click(screen.getByRole('button', { name: /新增智能体/ }));
+    const nameInput = await screen.findByLabelText('智能体名称');
+    fireEvent.change(nameInput, { target: { value: '校验测试' } });
+    // 不选择必填的关联大模型直接保存
+    fireEvent.click(screen.getByRole('button', { name: /保存/ }));
+
+    await waitFor(() => {
+      expect(screen.getByText('请选择关联大模型')).toBeInTheDocument();
+    });
+    expect(mockSaveConfig).not.toHaveBeenCalled();
+  });
+
+  it('填写完整信息保存后调用 saveConfig 并收起表单', async () => {
+    render(<AgentsPage />);
+    fireEvent.click(screen.getByRole('button', { name: /新增智能体/ }));
+
+    const nameInput = await screen.findByLabelText('智能体名称');
+    fireEvent.change(nameInput, { target: { value: '新智能体' } });
+
+    // 选择关联大模型
+    fireEvent.mouseDown(screen.getByLabelText('关联大模型'));
+    fireEvent.click(await screen.findByText('DeepSeek (deepseek)'));
+
+    fireEvent.click(screen.getByRole('button', { name: /保存/ }));
+
+    await waitFor(() => {
+      expect(mockSaveConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agents: expect.arrayContaining([
+            expect.objectContaining({ name: '新智能体', modelId: 'mdl_1' }),
+          ]),
+        }),
+      );
+    });
+    // 保存成功后表单收起
+    await waitFor(() => {
+      expect(screen.queryByLabelText('智能体名称')).not.toBeInTheDocument();
+    });
+  });
+
+  it('点击取消收起表单并清空输入', async () => {
+    render(<AgentsPage />);
+    fireEvent.click(screen.getByRole('button', { name: /新增智能体/ }));
+    const nameInput = await screen.findByLabelText('智能体名称');
+    fireEvent.change(nameInput, { target: { value: '临时内容' } });
+    fireEvent.click(screen.getByRole('button', { name: /取\s*消/ }));
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText('智能体名称')).not.toBeInTheDocument();
+    });
+    expect(mockSaveConfig).not.toHaveBeenCalled();
   });
 });

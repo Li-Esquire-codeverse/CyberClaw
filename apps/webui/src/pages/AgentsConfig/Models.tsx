@@ -69,6 +69,7 @@ const ModelsPage: React.FC = () => {
   const [form] = Form.useForm<ModelFormValues>();
   const [editingModel, setEditingModel] = useState<ClawModel | null>(null);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const [editForm] = Form.useForm<ModelFormValues>();
 
   const handleProviderChange = (provider: string) => {
@@ -89,6 +90,12 @@ const ModelsPage: React.FC = () => {
     const res = await persist({ ...config, models: [...config.models, model] });
     if (!res.ok) return;
     message.success('模型配置已添加');
+    form.resetFields();
+    setCreating(false);
+  };
+
+  const closeCreate = () => {
+    setCreating(false);
     form.resetFields();
   };
 
@@ -163,7 +170,13 @@ const ModelsPage: React.FC = () => {
     <PageContainer
       title="大模型配置"
       content="配置接入的大模型服务（OpenAI 兼容接口），供智能体对话使用。"
+      extra={
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+          新增模型
+        </Button>
+      }
     >
+      {creating && (
       <ProCard
         title="添加模型"
         extra={<ApiOutlined style={{ fontSize: 18, color: '#1677ff' }} />}
@@ -210,11 +223,15 @@ const ModelsPage: React.FC = () => {
           <Form.Item name="enabled" label="启用" valuePropName="checked">
             <Switch checkedChildren="启用" unCheckedChildren="停用" />
           </Form.Item>
-          <Button type="primary" htmlType="submit" icon={<PlusOutlined />}>
-            添加模型
-          </Button>
+          <Space>
+            <Button type="primary" htmlType="submit" icon={<PlusOutlined />}>
+              保存
+            </Button>
+            <Button onClick={closeCreate}>取消</Button>
+          </Space>
         </Form>
       </ProCard>
+      )}
 
       <ProCard title="已配置模型">
         {config.models.length === 0 ? (
