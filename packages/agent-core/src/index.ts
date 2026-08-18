@@ -24,6 +24,7 @@ export type {
   CreatedLangchainAgent,
   ToolExecutor,
 } from './langchain.js';
+export type { BaseCheckpointSaver } from './langchain.js';
 export {
   findRepoRoot,
   getEnabledModels,

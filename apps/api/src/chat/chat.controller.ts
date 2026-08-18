@@ -45,6 +45,7 @@ export class ChatController {
         built,
         dto.messages ?? [],
         abortController.signal,
+        dto.conversationId,
       )) {
         if (res.destroyed || res.writableEnded) {
           return;

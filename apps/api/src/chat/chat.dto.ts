@@ -21,13 +21,18 @@ export class ChatMessageDto {
 /**
  * AI 助手对话请求
  *
- * 后端无状态：不保存会话，每次请求携带完整消息历史，
- * 由 langchain createAgent 基于 CyberClaw.json 中智能体的配置执行。
+ * 携带 conversationId（会话 ID）时，后端通过 langgraph checkpointer
+ * 按 thread_id 持久化/恢复对话历史（对话记忆）；不携带时退化为单轮。
  */
 export class ChatRequestDto {
   @IsString()
   @IsNotEmpty({ message: 'agentId is required' })
   agentId!: string;
+
+  @IsOptional()
+  @IsString()
+  /** 会话 ID（thread_id）：同 ID 的请求共享对话历史 */
+  conversationId?: string;
 
   @IsOptional()
   @IsBoolean()

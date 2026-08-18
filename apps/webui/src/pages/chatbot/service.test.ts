@@ -18,6 +18,41 @@ function sse(payload: unknown): string {
   return JSON.stringify(payload);
 }
 
+describe('CyberClawChatProvider.transformParams', () => {
+  it('只传本轮新消息 + conversationId（历史由后端 checkpointer 恢复）', () => {
+    const provider = createChatProvider('ag_1') as unknown as {
+      transformParams: (p: object, o: object) => object;
+    };
+    const result = provider.transformParams(
+      {
+        messages: [{ role: 'user', content: 'hi' }],
+        conversationId: 'conv-1',
+      },
+      { params: { agentId: 'ag_1', stream: true } },
+    ) as { agentId: string; stream: boolean; conversationId: string; messages: unknown[] };
+
+    expect(result).toEqual({
+      agentId: 'ag_1',
+      stream: true,
+      conversationId: 'conv-1',
+      messages: [{ role: 'user', content: 'hi' }],
+    });
+  });
+
+  it('缺省 conversationId 时请求体不携带该字段（后端按 agentId 兜底）', () => {
+    const provider = createChatProvider('ag_1') as unknown as {
+      transformParams: (p: object, o: object) => object;
+    };
+    const result = provider.transformParams(
+      { messages: [{ role: 'user', content: 'hi' }] },
+      { params: { agentId: 'ag_1', stream: true } },
+    ) as { conversationId?: string; messages: unknown[] };
+
+    expect(result.conversationId).toBeUndefined();
+    expect(result.messages).toHaveLength(1);
+  });
+});
+
 describe('CyberClawChatProvider.transformMessage', () => {
   const provider = createChatProvider('ag_1') as unknown as {
     transformMessage: (i: TransformInfo) => ChatAgentMessage;

@@ -1,4 +1,5 @@
 import { FakeListChatModel } from '@langchain/core/utils/testing';
+import { MemorySaver } from '@langchain/langgraph-checkpoint';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createChatModelFromConfig,
@@ -152,5 +153,74 @@ describe('createLangchainAgent', () => {
     });
     const last = result.messages[result.messages.length - 1];
     expect(last.content).toContain('收到，测试通过');
+  });
+
+  it('checkpointer 启用后同一 thread_id 自动恢复历史（对话记忆）', async () => {
+    const fake = new FakeListChatModel({ responses: ['回复一', '回复二'] });
+    const { agent } = await createLangchainAgent({
+      config: sampleConfig,
+      llmFactory: () => fake,
+      checkpointer: new MemorySaver(),
+    });
+
+    // 第一轮：只传新消息
+    await agent.invoke(
+      { messages: [{ role: 'user', content: '你好，我叫小明' }] },
+      { configurable: { thread_id: 'conv-1' } },
+    );
+    // 第二轮：同样只传新消息，checkpointer 应恢复上一轮历史
+    await agent.invoke(
+      { messages: [{ role: 'user', content: '我叫什么名字？' }] },
+      { configurable: { thread_id: 'conv-1' } },
+    );
+
+    // 从线程状态读取完整历史，验证两轮消息都被持久化
+    const state = await (agent as { getState: (c: object) => Promise<{ values: { messages: unknown[] } }> }).getState(
+      { configurable: { thread_id: 'conv-1' } },
+    );
+    const contents = state.values.messages.map((m) =>
+      String((m as { content: unknown }).content),
+    );
+    expect(contents.join('|')).toContain('你好，我叫小明');
+    expect(contents.join('|')).toContain('回复一');
+    expect(contents.join('|')).toContain('我叫什么名字？');
+  });
+
+  it('不同 thread_id 会话隔离（互不干扰）', async () => {
+    const fake = new FakeListChatModel({ responses: ['回复一', '回复二', '回复三'] });
+    const { agent } = await createLangchainAgent({
+      config: sampleConfig,
+      llmFactory: () => fake,
+      checkpointer: new MemorySaver(),
+    });
+
+    await agent.invoke(
+      { messages: [{ role: 'user', content: '我是会话 A 的消息' }] },
+      { configurable: { thread_id: 'conv-a' } },
+    );
+    await agent.invoke(
+      { messages: [{ role: 'user', content: '我是会话 B 的消息' }] },
+      { configurable: { thread_id: 'conv-b' } },
+    );
+
+    const stateA = await (agent as { getState: (c: object) => Promise<{ values: { messages: unknown[] } }> }).getState(
+      { configurable: { thread_id: 'conv-a' } },
+    );
+    const contentsA = stateA.values.messages.map((m) =>
+      String((m as { content: unknown }).content),
+    );
+    const stateB = await (agent as { getState: (c: object) => Promise<{ values: { messages: unknown[] } }> }).getState(
+      { configurable: { thread_id: 'conv-b' } },
+    );
+    const contentsB = stateB.values.messages.map((m) =>
+      String((m as { content: unknown }).content),
+    );
+
+    // 会话 A 只含 A 的消息；会话 B 只含 B 的消息
+    expect(contentsA.join('|')).toContain('我是会话 A 的消息');
+    expect(contentsA.join('|')).toContain('回复一');
+    expect(contentsA.join('|')).not.toContain('我是会话 B 的消息');
+    expect(contentsB.join('|')).toContain('我是会话 B 的消息');
+    expect(contentsB.join('|')).not.toContain('我是会话 A 的消息');
   });
 });

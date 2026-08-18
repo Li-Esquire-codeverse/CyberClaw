@@ -252,7 +252,11 @@ const ChatbotPage: React.FC = () => {
           : c,
       ),
     );
-    onRequest({ messages: [{ role: 'user', content: text }] });
+    onRequest({
+      messages: [{ role: 'user', content: text }],
+      // 会话 ID 即 thread_id：同会话连续对话共享记忆
+      conversationId: activeKey,
+    });
   };
 
   const newChat = () => {

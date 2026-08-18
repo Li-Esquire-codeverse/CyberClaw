@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { MemorySaver } from '@langchain/langgraph-checkpoint';
 import {
   NotFoundException,
   UnprocessableEntityException,
@@ -86,16 +87,19 @@ describe('ChatService', () => {
   });
 
   describe('buildAgent', () => {
-    it('根据智能体配置调用 createLangchainAgent（modelId/systemPrompt/配置）', async () => {
+    it('根据智能体配置调用 createLangchainAgent（modelId/systemPrompt/配置/记忆）', async () => {
       createLangchainAgentMock.mockResolvedValue(builtAgentOf().created);
       const result = await service.buildAgent('ag_1');
       expect(result.agent).toEqual(sampleAgent);
-      expect(createLangchainAgentMock).toHaveBeenCalledWith({
+      const callArgs = createLangchainAgentMock.mock.calls[0][0];
+      expect(callArgs).toMatchObject({
         config: sampleConfig,
         modelId: 'mdl_1',
         systemPrompt: '你是测试助手',
         toolExecutors: {},
       });
+      // 对话记忆 checkpointer 已注入（默认 MemorySaver）
+      expect(callArgs.checkpointer).toBeInstanceOf(MemorySaver);
     });
 
     it('智能体不存在时抛 404', async () => {
@@ -274,6 +278,43 @@ describe('ChatService', () => {
         { event: 'agent_start', agentId: 'ag_1', agentName: '测试助手' },
         '[DONE]',
       ]);
+    });
+
+    it('conversationId 映射为 langgraph thread_id（对话记忆）', async () => {
+      const built = builtAgentOf();
+      const streamMock = jest.fn().mockImplementation(async function* () {
+        // no-op
+      });
+      (built.created.agent.stream as jest.Mock).mockImplementation(streamMock);
+
+      for await (const _evt of service.streamChat(
+        built,
+        [{ role: 'user', content: 'hi' }],
+        undefined,
+        'conv-1',
+      )) {
+        /* collect */
+      }
+
+      const [, config] = streamMock.mock.calls[0];
+      expect(config.configurable?.thread_id).toBe('conv-1');
+    });
+
+    it('缺省 conversationId 时按智能体 ID 兜底隔离', async () => {
+      const built = builtAgentOf();
+      const streamMock = jest.fn().mockImplementation(async function* () {
+        // no-op
+      });
+      (built.created.agent.stream as jest.Mock).mockImplementation(streamMock);
+
+      for await (const _evt of service.streamChat(built, [
+        { role: 'user', content: 'hi' },
+      ])) {
+        /* collect */
+      }
+
+      const [, config] = streamMock.mock.calls[0];
+      expect(config.configurable?.thread_id).toBe('agent:ag_1');
     });
 
     it('消息历史转换为 langchain BaseMessage 后传给 agent.stream', async () => {

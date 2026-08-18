@@ -1,3 +1,4 @@
+import { MemorySaver } from '@langchain/langgraph-checkpoint';
 import {
   Inject,
   Injectable,
@@ -15,6 +16,7 @@ import type {
   CreatedLangchainAgent,
   ToolExecutor,
 } from '@cyberclaw/agent-core';
+import type { BaseCheckpointSaver } from '@cyberclaw/agent-core';
 import { ClawConfigService } from '../claw/claw-config.service';
 import type { ClawAgent } from '../claw/claw.types';
 import type { ChatMessageDto } from './chat.dto';
@@ -95,6 +97,9 @@ function isToolMessage(
  *  { provide: CHAT_TOOL_EXECUTORS, useValue: { 'web-search': impl, ... } } */
 export const CHAT_TOOL_EXECUTORS = Symbol('CHAT_TOOL_EXECUTORS');
 
+/** checkpointer 注入 token：可替换为 SqliteSaver 等持久化实现 */
+export const CHAT_CHECKPOINTER = Symbol('CHAT_CHECKPOINTER');
+
 /**
  * AI 助手对话服务
  *
@@ -116,6 +121,12 @@ export class ChatService {
     @Optional()
     @Inject(CHAT_TOOL_EXECUTORS)
     private readonly toolExecutors: Record<string, ToolExecutor> = {},
+    /** 对话记忆存储（默认 MemorySaver 进程内；生产可注入 SQLite/Postgres saver） */
+    @Optional()
+    @Inject(CHAT_CHECKPOINTER)
+    private readonly checkpointer: BaseCheckpointSaver =
+      // ESM/CJS 双包类型不兼容，运行时为同一对象，此处断言收口
+      new MemorySaver() as unknown as BaseCheckpointSaver,
   ) {}
 
   /**
@@ -153,6 +164,7 @@ export class ChatService {
       modelId: agent.modelId,
       systemPrompt: agent.systemPrompt,
       toolExecutors: this.toolExecutors,
+      checkpointer: this.checkpointer,
     });
     return { created, agent };
   }
@@ -178,10 +190,13 @@ export class ChatService {
   /**
    * 流式执行对话，逐个产出 SSE 事件：
    *   1. agent_start          —— 会话开始（含智能体信息）
-   *   2. choices.delta.content —— 模型生成 token（打字机效果）
-   *   3. tool_start / tool_end —— 工具调用过程
-   *   4. '[DONE]'              —— 正常结束
+   *   2. reasoning_delta      —— 模型思考过程增量
+   *   3. choices.delta.content —— 模型生成 token（打字机效果）
+   *   4. tool_start / tool_end —— 工具调用过程
+   *   5. '[DONE]'              —— 正常结束
    *
+   * 传入 conversationId 时按 thread_id 启用对话记忆（checkpointer 自动
+   * 恢复历史，messages 只应包含本轮新消息）；缺省时退化为单轮。
    * 流中途出错（如模型服务异常）会向上抛出，由 Controller 转成
    * SSE error 内容收尾；客户端断开时通过 signal 中止执行。
    */
@@ -189,6 +204,7 @@ export class ChatService {
     built: BuiltAgent,
     messages: ChatMessageDto[],
     signal?: AbortSignal,
+    conversationId?: string,
   ): AsyncGenerator<ChatSseEvent, void, void> {
     const { created, agent } = built;
 
@@ -203,9 +219,15 @@ export class ChatService {
     // 注：langchain 新版 stream() 的泛型推断（TEncoding/TStreamMode）存在缺陷，
     // 运行时实际形状为 [BaseMessage, metadata] 二元组（StreamMessageOutput），
     // 这里按运行时形状显式断言。
+    const threadId = conversationId || `agent:${agent.id}`;
     const stream = (await created.agent.stream(
       { messages: history },
-      { streamMode: 'messages', recursionLimit: 100, signal },
+      {
+        configurable: { thread_id: threadId },
+        streamMode: 'messages',
+        recursionLimit: 100,
+        signal,
+      },
     )) as unknown as AsyncIterable<[BaseMessage, { langgraph_node?: string }]>;
 
     for await (const [chunk] of stream) {

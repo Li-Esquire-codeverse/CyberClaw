@@ -3,6 +3,11 @@ import { createAgent, type CreateAgentParams } from 'langchain';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import type { DynamicStructuredToolInput, StructuredToolInterface } from '@langchain/core/tools';
 import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
+
+/** 对话记忆存储类型：透传 langgraph checkpointer（MemorySaver / SqliteSaver 等）
+ *  由 agent-core 统一导出，避免消费方（CJS）与 ESM 双包类型冲突。 */
+export type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint';
 import {
   type AgentRuntimeConfig,
   type ClawConfigFile,
@@ -45,6 +50,11 @@ export interface CreateLangchainAgentOptions {
   extraTools?: StructuredToolInterface[];
   /** 自定义 LLM 工厂（默认用 ChatOpenAI 对接 baseUrl；测试可注入 fake 模型） */
   llmFactory?: (model: ClawModel) => BaseChatModel;
+  /**
+   * langgraph checkpointer：启用后按 thread_id 持久化会话历史（对话记忆）。
+   * 传 BaseCheckpointSaver（MemorySaver / SqliteSaver）或 true（langgraph 默认 saver）。
+   */
+  checkpointer?: BaseCheckpointSaver | boolean;
   /** 透传给 createAgent 的额外参数 */
   agentOptions?: Omit<CreateAgentParams, 'model' | 'tools' | 'systemPrompt'>;
 }
@@ -153,6 +163,9 @@ export async function createLangchainAgent(
     model: chatModel,
     tools,
     systemPrompt,
+    ...(options.checkpointer !== undefined
+      ? { checkpointer: options.checkpointer }
+      : {}),
     ...options.agentOptions,
   });
 

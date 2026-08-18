@@ -22,6 +22,8 @@ export interface ChatAgentMessage {
 type ChatInput = {
   agentId?: string;
   stream?: boolean;
+  /** 会话 ID：同 ID 请求共享对话历史（后端按 thread_id 持久化） */
+  conversationId?: string;
   messages: ChatAgentMessage[];
 };
 
@@ -74,7 +76,8 @@ class CyberClawChatProvider extends AbstractChatProvider<
     return {
       ...(options?.params || {}),
       ...requestParams,
-      messages: this.getMessages(),
+      // 只传本轮新消息：历史由后端 langgraph checkpointer 按 conversationId 恢复
+      messages: requestParams?.messages || [],
     };
   }
 
