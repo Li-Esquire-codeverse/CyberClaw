@@ -12,7 +12,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from 'react';
 
@@ -172,8 +171,10 @@ const roleConfig: BubbleListProps['role'] = {
 
 const ChatbotPage: React.FC = () => {
   const { styles } = useStyles();
-  const idCounter = useRef(0);
-  const generateId = useCallback(() => `conv-${++idCounter.current}`, []);
+  // 会话 id 必须全局唯一：旧会话 id 已持久化到后端（SQLite），
+  // 若用自增计数（conv-1, conv-2…）会在页面刷新后重新从 1 开始，
+  // 与后端已存在的会话 id 碰撞——新建对话会串到旧会话、删除会误删旧记录。
+  const generateId = useCallback(() => `conv-${crypto.randomUUID()}`, []);
 
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeKey, setActiveKey] = useState<string>('');
