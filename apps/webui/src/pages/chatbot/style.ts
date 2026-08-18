@@ -26,6 +26,35 @@ export const useStyles = createStyles(({ css, token }) => ({
     background: ${token.colorBgContainer};
   `,
 
+  agentBar: css`
+    display: flex;
+    align-items: center;
+    padding: ${token.paddingSM}px ${token.paddingMD}px;
+    border-bottom: 1px solid ${token.colorBorderSecondary};
+    background: ${token.colorBgContainer};
+    gap: 8px;
+  `,
+
+  agentDesc: css`
+    color: ${token.colorTextSecondary};
+    font-size: ${token.fontSizeSM}px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  `,
+
+  toolTrace: css`
+    margin-bottom: 8px;
+    line-height: 1.5;
+  `,
+
+  emptyState: css`
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  `,
+
   messages: css`
     flex: 1;
     overflow-y: auto;
