@@ -42,3 +42,6 @@ desktop.ini
 tmp/
 temp/
 *.tmp
+
+# ===== Runtime data (conversation memory sqlite) =====
+data/

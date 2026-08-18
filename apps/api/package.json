@@ -25,6 +25,7 @@
   },
   "dependencies": {
     "@cyberclaw/agent-core": "0.1.0",
+    "@langchain/langgraph-checkpoint-sqlite": "^1.0.3",
     "@nestjs/common": "^11.0.17",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.1.11",
@@ -41,6 +42,7 @@
     "@nestjs/testing": "^11.0.1",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.8",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.7",

@@ -16,6 +16,7 @@ import {
   type BuiltAgent,
 } from './chat.service';
 import { ClawConfigService } from '../claw/claw-config.service';
+import { CONVERSATIONS_STORE } from './conversations.store';
 import type { ClawAgent } from '../claw/claw.types';
 
 // @cyberclaw/agent-core 为 ESM 包，ChatService 内部用动态 import 加载，
@@ -72,6 +73,16 @@ function builtAgentOf(agent: ClawAgent = sampleAgent): BuiltAgent {
 describe('ChatService', () => {
   let service: ChatService;
   const configService = { loadConfig: jest.fn() };
+  const conversationsStore = {
+    list: jest.fn(() => []),
+    upsert: jest.fn((input: unknown) => ({
+      ...(input as object),
+      createdAt: '2026-08-18T00:00:00.000Z',
+      updatedAt: '2026-08-18T00:00:00.000Z',
+    })),
+    remove: jest.fn(() => true),
+    close: jest.fn(),
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -81,6 +92,7 @@ describe('ChatService', () => {
         ChatService,
         { provide: ClawConfigService, useValue: configService },
         { provide: CHAT_TOOL_EXECUTORS, useValue: {} },
+        { provide: CONVERSATIONS_STORE, useValue: conversationsStore },
       ],
     }).compile();
     service = moduleRef.get(ChatService);
@@ -342,6 +354,69 @@ describe('ChatService', () => {
       );
       expect(roles).toEqual(['user', 'assistant', 'user']);
       expect(config).toMatchObject({ streamMode: 'messages' });
+    });
+  });
+
+  describe('conversations', () => {
+    it('getHistory 从线程快照恢复 user/assistant 消息（含思考内容）', async () => {
+      const built = builtAgentOf();
+      const getState = jest.fn().mockResolvedValue({
+        values: {
+          messages: [
+            new HumanMessage('你好，我叫小明'),
+            new AIMessage({
+              content: '记住了',
+              additional_kwargs: { reasoning_content: '用户报了名字，记下' },
+            }),
+            new ToolMessage({ content: 'ok', tool_call_id: 'c1', name: 't' }),
+            new HumanMessage('我叫什么？'),
+          ],
+        },
+      });
+      (built.created.agent as unknown as { getState: unknown }).getState = getState;
+      // buildAgent 内部会调用 createLangchainAgent，需返回同一个带 getState 的实例
+      createLangchainAgentMock.mockResolvedValue(built.created);
+
+      const history = await service.getHistory('ag_1', 'conv-1');
+
+      expect(getState).toHaveBeenCalledWith({
+        configurable: { thread_id: 'conv-1' },
+      });
+      expect(history).toEqual([
+        { role: 'user', content: '你好，我叫小明' },
+        {
+          role: 'assistant',
+          content: '记住了',
+          thinkContent: '用户报了名字，记下',
+        },
+        { role: 'user', content: '我叫什么？' },
+      ]);
+    });
+
+    it('listConversations 透传给 store', async () => {
+      const rows = [{ id: 'c1' }];
+      (conversationsStore.list as jest.Mock).mockReturnValue(rows);
+      expect(service.listConversations('ag_1')).toBe(rows);
+      expect(conversationsStore.list).toHaveBeenCalledWith('ag_1');
+    });
+
+    it('upsertConversation 透传给 store', () => {
+      const result = service.upsertConversation({
+        id: 'c1',
+        agentId: 'ag_1',
+        title: '新对话',
+      });
+      expect(conversationsStore.upsert).toHaveBeenCalledWith({
+        id: 'c1',
+        agentId: 'ag_1',
+        title: '新对话',
+      });
+      expect(result).toMatchObject({ id: 'c1' });
+    });
+
+    it('removeConversation 删除列表记录（MemorySaver 无 deleteThread 联动）', () => {
+      expect(service.removeConversation('c1')).toBe(true);
+      expect(conversationsStore.remove).toHaveBeenCalledWith('c1');
     });
   });
 });

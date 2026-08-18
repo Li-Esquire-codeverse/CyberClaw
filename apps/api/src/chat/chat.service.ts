@@ -7,6 +7,13 @@ import {
   Optional,
   UnprocessableEntityException,
 } from '@nestjs/common';
+import { SqliteSaver } from '@langchain/langgraph-checkpoint-sqlite';
+import {
+  CONVERSATIONS_STORE,
+  ConversationRecord,
+  ConversationsStore,
+  UpsertConversationInput,
+} from './conversations.store';
 import {
   AIMessage,
   type BaseMessage,
@@ -100,6 +107,21 @@ export const CHAT_TOOL_EXECUTORS = Symbol('CHAT_TOOL_EXECUTORS');
 /** checkpointer 注入 token：可替换为 SqliteSaver 等持久化实现 */
 export const CHAT_CHECKPOINTER = Symbol('CHAT_CHECKPOINTER');
 
+/** 历史回显消息（与前端 ChatAgentMessage 形状一致） */
+export interface HistoryMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  thinkContent?: string;
+}
+
+/** 从 checkpoint 消息中判断角色（duck-typing，避免 ESM/CJS 双包 instanceof 失效） */
+function messageTypeOf(m: unknown): string | undefined {
+  const maybe = m as { _getType?: unknown };
+  return typeof maybe._getType === 'function'
+    ? (maybe._getType as () => string).call(m)
+    : undefined;
+}
+
 /**
  * AI 助手对话服务
  *
@@ -127,6 +149,9 @@ export class ChatService {
     private readonly checkpointer: BaseCheckpointSaver =
       // ESM/CJS 双包类型不兼容，运行时为同一对象，此处断言收口
       new MemorySaver() as unknown as BaseCheckpointSaver,
+    /** 会话列表元数据存储（SQLite） */
+    @Inject(CONVERSATIONS_STORE)
+    private readonly conversations: ConversationsStore,
   ) {}
 
   /**
@@ -272,5 +297,67 @@ export class ChatService {
     }
 
     yield '[DONE]';
+  }
+
+  /**
+   * 读取会话历史（历史回显）：从 checkpointer 线程快照恢复消息列表。
+   * 返回 user/assistant 消息（跳过 system/tool），assistant 消息附带思考内容。
+   */
+  async getHistory(
+    agentId: string,
+    conversationId: string,
+  ): Promise<HistoryMessage[]> {
+    const built = await this.buildAgent(agentId);
+    const agent = built.created.agent as unknown as {
+      getState: (config: object) => Promise<{ values: { messages: unknown[] } }>;
+    };
+    const state = await agent.getState({
+      configurable: { thread_id: conversationId },
+    });
+
+    const messages: HistoryMessage[] = [];
+    for (const m of state.values.messages ?? []) {
+      const type = messageTypeOf(m);
+      if (type === 'human') {
+        messages.push({ role: 'user', content: String((m as { content: unknown }).content) });
+      } else if (type === 'ai') {
+        const content = String((m as { content: unknown }).content);
+        const kwargs = (m as { additional_kwargs?: Record<string, unknown> }).additional_kwargs;
+        const think =
+          typeof kwargs?.reasoning_content === 'string'
+            ? kwargs.reasoning_content
+            : undefined;
+        messages.push({
+          role: 'assistant',
+          content,
+          ...(think && think.length > 0 ? { thinkContent: think } : {}),
+        });
+      }
+      // system / tool 消息不参与回显
+    }
+    return messages;
+  }
+
+  /** 会话列表（按更新时间倒序） */
+  listConversations(agentId?: string): ConversationRecord[] {
+    return this.conversations.list(agentId);
+  }
+
+  /** 创建/更新会话元数据 */
+  upsertConversation(input: UpsertConversationInput): ConversationRecord {
+    return this.conversations.upsert(input);
+  }
+
+  /**
+   * 删除会话：清理列表元数据 + 线程记忆（checkpointer）。
+   * 返回是否真的删除了记录。
+   */
+  removeConversation(id: string): boolean {
+    const removed = this.conversations.remove(id);
+    // SqliteSaver 支持按线程删除；其他 saver（如 MemorySaver）忽略
+    if (this.checkpointer instanceof SqliteSaver) {
+      void this.checkpointer.deleteThread(id);
+    }
+    return removed;
   }
 }

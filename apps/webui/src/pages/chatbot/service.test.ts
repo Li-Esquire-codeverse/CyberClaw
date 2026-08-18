@@ -1,5 +1,19 @@
-import { describe, expect, it } from 'vitest';
-import { createChatProvider, type ChatAgentMessage } from './service';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const { mockRequest } = vi.hoisted(() => ({ mockRequest: vi.fn() }));
+
+vi.mock('@umijs/max', () => ({
+  request: mockRequest,
+}));
+
+import {
+  createChatProvider,
+  deleteConversation,
+  loadConversations,
+  loadHistory,
+  saveConversation,
+  type ChatAgentMessage,
+} from './service';
 
 type TransformInfo = {
   originMessage?: ChatAgentMessage;
@@ -17,6 +31,60 @@ function info(data: string, origin?: ChatAgentMessage): TransformInfo {
 function sse(payload: unknown): string {
   return JSON.stringify(payload);
 }
+
+describe('conversations API', () => {
+  beforeEach(() => {
+    mockRequest.mockReset();
+  });
+
+  it('loadConversations 带 agentId 过滤参数', async () => {
+    mockRequest.mockResolvedValue([{ id: 'c1', agentId: 'ag_1', title: 'x' }]);
+    const list = await loadConversations('ag_1');
+    expect(mockRequest).toHaveBeenCalledWith('/api/claw/conversations?agentId=ag_1', {
+      method: 'GET',
+      skipErrorHandler: true,
+    });
+    expect(list).toHaveLength(1);
+  });
+
+  it('loadConversations 失败时返回空列表', async () => {
+    mockRequest.mockRejectedValue(new Error('network'));
+    expect(await loadConversations('ag_1')).toEqual([]);
+  });
+
+  it('saveConversation POST 到后端', async () => {
+    mockRequest.mockResolvedValue({ id: 'c1', agentId: 'ag_1', title: '新对话' });
+    await saveConversation({ id: 'c1', agentId: 'ag_1', title: '新对话' });
+    expect(mockRequest).toHaveBeenCalledWith('/api/claw/conversations', {
+      method: 'POST',
+      data: { id: 'c1', agentId: 'ag_1', title: '新对话' },
+      skipErrorHandler: true,
+    });
+  });
+
+  it('deleteConversation DELETE 单资源', async () => {
+    mockRequest.mockResolvedValue({ ok: true });
+    expect(await deleteConversation('c1')).toBe(true);
+    expect(mockRequest).toHaveBeenCalledWith('/api/claw/conversations/c1', {
+      method: 'DELETE',
+      skipErrorHandler: true,
+    });
+  });
+
+  it('loadHistory 读取会话线程消息', async () => {
+    mockRequest.mockResolvedValue([
+      { role: 'user', content: 'hi' },
+      { role: 'assistant', content: 'hello', thinkContent: '想一下' },
+    ]);
+    const history = await loadHistory('ag_1', 'conv-1');
+    expect(mockRequest).toHaveBeenCalledWith(
+      '/api/claw/chat/history?agentId=ag_1&conversationId=conv-1',
+      { method: 'GET', skipErrorHandler: true },
+    );
+    expect(history).toHaveLength(2);
+    expect(history[1]).toMatchObject({ thinkContent: '想一下' });
+  });
+});
 
 describe('CyberClawChatProvider.transformParams', () => {
   it('只传本轮新消息 + conversationId（历史由后端 checkpointer 恢复）', () => {

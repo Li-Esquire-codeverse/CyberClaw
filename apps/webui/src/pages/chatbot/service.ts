@@ -1,4 +1,5 @@
 // src/pages/chatbot/service.ts
+import { request } from '@umijs/max';
 import {
   AbstractChatProvider,
   type TransformMessage,
@@ -135,6 +136,76 @@ class CyberClawChatProvider extends AbstractChatProvider<
       thinkContent,
       tools,
     };
+  }
+}
+
+/** 会话元数据（Conversations 列表项） */
+export interface ConversationRecord {
+  id: string;
+  agentId: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** 会话列表：按更新时间倒序 */
+export async function loadConversations(
+  agentId?: string,
+): Promise<ConversationRecord[]> {
+  try {
+    const res = await request<ConversationRecord[]>(
+      `/api/claw/conversations${agentId ? `?agentId=${encodeURIComponent(agentId)}` : ''}`,
+      { method: 'GET', skipErrorHandler: true },
+    );
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
+  }
+}
+
+/** 创建/更新会话元数据（标题/时间） */
+export async function saveConversation(record: {
+  id: string;
+  agentId: string;
+  title?: string;
+}): Promise<ConversationRecord | undefined> {
+  try {
+    return await request<ConversationRecord>('/api/claw/conversations', {
+      method: 'POST',
+      data: record,
+      skipErrorHandler: true,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** 删除会话（同时清理后端线程记忆） */
+export async function deleteConversation(id: string): Promise<boolean> {
+  try {
+    await request(`/api/claw/conversations/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      skipErrorHandler: true,
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 历史回显：读取会话线程消息 */
+export async function loadHistory(
+  agentId: string,
+  conversationId: string,
+): Promise<ChatAgentMessage[]> {
+  try {
+    const res = await request<ChatAgentMessage[]>(
+      `/api/claw/chat/history?agentId=${encodeURIComponent(agentId)}&conversationId=${encodeURIComponent(conversationId)}`,
+      { method: 'GET', skipErrorHandler: true },
+    );
+    return Array.isArray(res) ? res : [];
+  } catch {
+    return [];
   }
 }
 

@@ -19,7 +19,13 @@ import React, {
 import type { CyberClawConfig } from '@/services/cyberclaw';
 import { loadConfig } from '@/services/cyberclaw';
 import type { ConversationItem, ParsedMessage, ToolCallInfo } from './data';
-import { createChatProvider } from './service';
+import {
+  createChatProvider,
+  deleteConversation,
+  loadConversations,
+  loadHistory,
+  saveConversation,
+} from './service';
 import type { ChatAgentMessage } from './service';
 import { useStyles } from './style';
 
@@ -211,30 +217,58 @@ const ChatbotPage: React.FC = () => {
     }
   }, [agents, agentId]);
 
-  // 初始化一个默认会话
+  // ================= 会话列表（后端持久化，按智能体加载） =================
   useEffect(() => {
-    if (conversations.length === 0) {
-      const key = generateId();
-      setConversations([
-        { key, label: '💬 新对话', group: '今天', isDraft: true },
-      ]);
-      setActiveKey(key);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (!agentId) return;
+    let cancelled = false;
+    loadConversations(agentId).then((list) => {
+      if (cancelled) return;
+      if (list.length > 0) {
+        const items: ConversationItem[] = list.map((c) => ({
+          key: c.id,
+          label: c.title || '新对话',
+          group: '历史',
+          isDraft: false,
+        }));
+        setConversations(items);
+        setActiveKey((prev) => (prev && items.some((i) => i.key === prev) ? prev : items[0].key));
+      } else {
+        // 无历史会话：新建一个 draft
+        const key = generateId();
+        setConversations([
+          { key, label: '💬 新对话', group: '今天', isDraft: true },
+        ]);
+        setActiveKey(key);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [agentId]);
 
   // ================= 对话 Provider（按智能体切换） =================
   const provider = useMemo(
     () => (agentId ? (createChatProvider(agentId) as any) : undefined),
     [agentId],
   );
-  const { onRequest, abort, isRequesting, parsedMessages } = useXChat<
+  const { onRequest, abort, isRequesting, parsedMessages, setMessages } = useXChat<
     any,
     ParsedMessage
   >({
     provider,
     conversationKey: activeKey,
     parser,
+    // 历史回显：切换会话时从后端加载该线程消息（langgraph checkpointer 持久化）
+    defaultMessages: async ({
+      conversationKey: key,
+    }: { conversationKey?: string }) => {
+      if (!agentId || !key) return [];
+      const history = await loadHistory(agentId, String(key));
+      return history.map((m) => ({
+        message: m as ChatAgentMessage,
+        status: 'local' as const,
+      }));
+    },
     requestPlaceholder: { role: 'assistant', content: '' },
   });
 
@@ -245,6 +279,7 @@ const ChatbotPage: React.FC = () => {
       return;
     }
     setInputValue('');
+    const isDraft = conversations.find((c) => c.key === activeKey)?.isDraft;
     setConversations((prev) =>
       prev.map((c) =>
         c.key === activeKey && c.isDraft
@@ -252,6 +287,14 @@ const ChatbotPage: React.FC = () => {
           : c,
       ),
     );
+    // 首次发言后把会话持久化到后端（标题取首句，后续消息刷新时间）
+    if (isDraft && agentId) {
+      void saveConversation({
+        id: activeKey,
+        agentId,
+        title: text.slice(0, 20),
+      });
+    }
     onRequest({
       messages: [{ role: 'user', content: text }],
       // 会话 ID 即 thread_id：同会话连续对话共享记忆
@@ -358,10 +401,11 @@ const ChatbotPage: React.FC = () => {
                   items: [{ key: 'delete', label: '删除', danger: true }],
                   onClick: ({ key }) => {
                     if (key === 'delete') {
+                      const target = conversation.key;
+                      // 后端清理会话（列表元数据 + 线程记忆）
+                      void deleteConversation(target);
                       setConversations((prev) => {
-                        const next = prev.filter(
-                          (c) => c.key !== conversation.key,
-                        );
+                        const next = prev.filter((c) => c.key !== target);
                         if (next.length === 0) {
                           const key = generateId();
                           next.push({
@@ -371,11 +415,15 @@ const ChatbotPage: React.FC = () => {
                             isDraft: true,
                           });
                           setActiveKey(key);
-                        } else if (activeKey === conversation.key) {
+                        } else if (activeKey === target) {
                           setActiveKey(next[0]?.key ?? '');
                         }
                         return next;
                       });
+                      // 若删除的是当前会话，清空前端消息缓存
+                      if (activeKey === target) {
+                        setMessages([]);
+                      }
                     }
                   },
                 })}

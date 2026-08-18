@@ -1,7 +1,8 @@
-import { Body, Controller, Logger, Post, Res } from '@nestjs/common';
+import { Body, Controller, Get, Logger, Post, Query, Res } from '@nestjs/common';
 import type { Response } from 'express';
 import { ChatRequestDto } from './chat.dto';
-import { ChatService } from './chat.service';
+import { ChatService, type HistoryMessage } from './chat.service';
+import { requireConversationId } from './conversations.controller';
 
 /**
  * AI 助手对话接口（SSE 流式输出）
@@ -23,6 +24,16 @@ export class ChatController {
   private readonly logger = new Logger(ChatController.name);
 
   constructor(private readonly chatService: ChatService) {}
+
+  @Get('history')
+  async history(
+    @Query('agentId') agentId: string,
+    @Query('conversationId') conversationId?: string,
+  ): Promise<HistoryMessage[]> {
+    // 历史回显：读取该会话线程的消息列表
+    const id = requireConversationId(conversationId);
+    return this.chatService.getHistory(agentId, id);
+  }
 
   @Post()
   async chat(@Body() dto: ChatRequestDto, @Res() res: Response): Promise<void> {
