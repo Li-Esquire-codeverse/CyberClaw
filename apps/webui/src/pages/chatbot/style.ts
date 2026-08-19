@@ -17,6 +17,32 @@ export const useStyles = createStyles(({ css, token }) => ({
     overflow: hidden;
   `,
 
+  sidebarHeader: css`
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 8px;
+    border-bottom: 1px solid ${token.colorBorderSecondary};
+    flex-shrink: 0;
+  `,
+
+  sidebarAgent: css`
+    font-weight: 600;
+    font-size: ${token.fontSize}px;
+    color: ${token.colorText};
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 130px;
+  `,
+
+  sidebarCount: css`
+    font-size: ${token.fontSizeSM}px;
+    color: ${token.colorTextTertiary};
+    margin-left: auto;
+    flex-shrink: 0;
+  `,
+
   main: css`
     flex: 1;
     display: flex;

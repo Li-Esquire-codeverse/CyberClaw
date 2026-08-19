@@ -7,11 +7,25 @@ import type {
 } from '@ant-design/x/es/bubble/interface';
 import XMarkdown from '@ant-design/x-markdown';
 import { useXChat } from '@ant-design/x-sdk';
-import { Avatar, Button, Card, Empty, Select, Space, Tag, Tooltip } from 'antd';
+import {
+  Avatar,
+  Button,
+  Card,
+  Empty,
+  Input,
+  Modal,
+  Select,
+  Space,
+  Tag,
+  Tooltip,
+  message,
+} from 'antd';
+import type { InputRef } from 'antd';
 import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 
@@ -179,6 +193,10 @@ const ChatbotPage: React.FC = () => {
   const [conversations, setConversations] = useState<ConversationItem[]>([]);
   const [activeKey, setActiveKey] = useState<string>('');
   const [inputValue, setInputValue] = useState('');
+  // 会话重命名：受控 Modal + 输入框
+  const [renamingKey, setRenamingKey] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const renameInputRef = useRef<InputRef>(null);
 
   // ================= 智能体选择（读取 CyberClaw 配置） =================
   const [config, setConfig] = useState<CyberClawConfig | undefined>();
@@ -312,6 +330,60 @@ const ChatbotPage: React.FC = () => {
     setActiveKey(key);
   };
 
+  // ================= 会话重命名 =================
+  const startRename = (conversation: { key: string; label?: React.ReactNode }) => {
+    // 预填当前标题（去掉草稿的 💬 前缀）
+    setRenameValue(String(conversation.label ?? '').replace(/^💬\s*/, ''));
+    setRenamingKey(conversation.key);
+  };
+
+  const submitRename = () => {
+    const key = renamingKey;
+    const title = renameValue.trim();
+    setRenamingKey(null);
+    if (!key || !agentId) return;
+    if (!title) {
+      message.warning('请输入会话名称');
+      return;
+    }
+    void saveConversation({ id: key, agentId, title }).then((res) => {
+      if (res) {
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.key === key ? { ...c, label: title, isDraft: false } : c,
+          ),
+        );
+        message.success('会话已重命名');
+      } else {
+        message.error('重命名失败，请稍后重试');
+      }
+    });
+  };
+
+  // ================= 会话删除（确认后执行） =================
+  const removeConversation = (target: string) => {
+    setConversations((prev) => {
+      const next = prev.filter((c) => c.key !== target);
+      if (next.length === 0) {
+        const key = generateId();
+        next.push({
+          key,
+          label: '💬 新对话',
+          group: '今天',
+          isDraft: true,
+        });
+        setActiveKey(key);
+      } else if (activeKey === target) {
+        setActiveKey(next[0]?.key ?? '');
+      }
+      return next;
+    });
+    // 若删除的是当前会话，清空前端消息缓存
+    if (activeKey === target) {
+      setMessages([]);
+    }
+  };
+
   const bubbleItems = useMemo<BubbleItemType[]>(
     () =>
       parsedMessages.map((msg) => {
@@ -393,39 +465,56 @@ const ChatbotPage: React.FC = () => {
         <XProvider>
           <div className={styles.layout}>
             <div className={styles.sidebar}>
+              {/* 当前智能体上下文：会话列表按智能体隔离，标题让上下文一目了然 */}
+              <div className={styles.sidebarHeader}>
+                <RobotOutlined style={{ fontSize: 16, color: '#1677ff' }} />
+                <span
+                  className={styles.sidebarAgent}
+                  title={currentAgent?.name}
+                >
+                  {currentAgent?.name ?? '未选择智能体'}
+                </span>
+                <span className={styles.sidebarCount}>
+                  {conversations.length} 个会话
+                </span>
+              </div>
               <Conversations
                 items={conversations}
                 activeKey={activeKey}
                 onActiveChange={setActiveKey}
                 groupable
                 menu={(conversation) => ({
-                  items: [{ key: 'delete', label: '删除', danger: true }],
-                  onClick: ({ key }) => {
-                    if (key === 'delete') {
-                      const target = conversation.key;
-                      // 后端清理会话（列表元数据 + 线程记忆）
-                      void deleteConversation(target);
-                      setConversations((prev) => {
-                        const next = prev.filter((c) => c.key !== target);
-                        if (next.length === 0) {
-                          const key = generateId();
-                          next.push({
-                            key,
-                            label: '💬 新对话',
-                            group: '今天',
-                            isDraft: true,
-                          });
-                          setActiveKey(key);
-                        } else if (activeKey === target) {
-                          setActiveKey(next[0]?.key ?? '');
-                        }
-                        return next;
-                      });
-                      // 若删除的是当前会话，清空前端消息缓存
-                      if (activeKey === target) {
-                        setMessages([]);
-                      }
+                  items: [
+                    { key: 'rename', label: '重命名' },
+                    { key: 'delete', label: '删除', danger: true },
+                  ],
+                  onClick: ({ key: action }) => {
+                    if (action === 'rename') {
+                      startRename(conversation);
+                      return;
                     }
+                    if (action !== 'delete') return;
+                    const target = conversation.key;
+                    const label =
+                      String(conversation.label ?? '').replace(/^💬\s*/, '') ||
+                      '新对话';
+                    // 二次确认，避免误删（后端清理列表元数据 + 线程记忆）
+                    Modal.confirm({
+                      title: '删除会话',
+                      content: `确定删除「${label}」吗？该会话的对话记录将一并清除且无法恢复。`,
+                      okText: '删除',
+                      cancelText: '取消',
+                      okButtonProps: { danger: true },
+                      onOk: async () => {
+                        const ok = await deleteConversation(target);
+                        if (!ok) {
+                          message.error('删除失败，请稍后重试');
+                          return;
+                        }
+                        removeConversation(target);
+                        message.success('会话已删除');
+                      },
+                    });
                   },
                 })}
                 creation={{ onClick: newChat, label: '新建对话' }}
@@ -522,6 +611,31 @@ const ChatbotPage: React.FC = () => {
               )}
             </div>
           </div>
+
+          {/* 重命名会话 Modal */}
+          <Modal
+            title="重命名会话"
+            open={renamingKey !== null}
+            onOk={submitRename}
+            onCancel={() => setRenamingKey(null)}
+            okText="保存"
+            cancelText="取消"
+            width={420}
+            destroyOnHidden
+            afterOpenChange={(open) => {
+              if (open) renameInputRef.current?.focus();
+            }}
+          >
+            <Input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={(e) => setRenameValue(e.target.value)}
+              onPressEnter={submitRename}
+              placeholder="输入会话名称"
+              maxLength={50}
+              allowClear
+            />
+          </Modal>
         </XProvider>
       </Card>
     </PageContainer>
