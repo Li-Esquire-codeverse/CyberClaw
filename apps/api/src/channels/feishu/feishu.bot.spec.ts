@@ -17,10 +17,14 @@ describe('FeishuBotService', () => {
     buildAgent: jest.Mock;
     streamChat: jest.Mock;
   };
-  const sessions: FeishuSessionStore & { getOrCreate: jest.Mock } = {
+  const sessions: FeishuSessionStore & {
+    getOrCreate: jest.Mock;
+    switchAgent: jest.Mock;
+  } = {
     get: jest.fn(),
     upsert: jest.fn(),
     getOrCreate: jest.fn(() => 'conv-abc'),
+    switchAgent: jest.fn(() => 'conv-new'),
   };
   const configService = { loadConfig: jest.fn() };
 
@@ -252,6 +256,114 @@ describe('FeishuBotService', () => {
     });
     expect(chatService.buildAgent).toHaveBeenCalledWith('ag_env');
     delete process.env.FEISHU_AGENT_ID;
+  });
+
+  it('/agent 列出可用智能体（不进入对话）', async () => {
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '/agent',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(chatService.buildAgent).not.toHaveBeenCalled();
+    expect(sessions.switchAgent).not.toHaveBeenCalled();
+    expect(sentTexts.some((s) => s.text.includes('可用智能体'))).toBe(true);
+    expect(sentTexts.some((s) => s.text.includes('测试助手'))).toBe(true);
+  });
+
+  it('/agent <名称> 切换智能体并新建会话', async () => {
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '/agent 测试助手',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(sessions.switchAgent).toHaveBeenCalledWith('c1', 'ag_1');
+    expect(chatService.buildAgent).not.toHaveBeenCalled();
+    expect(sentTexts.some((s) => s.text.includes('已切换到智能体'))).toBe(true);
+  });
+
+  it('/agent <名称包含> 模糊匹配', async () => {
+    configService.loadConfig.mockReturnValue({
+      agents: [
+        { id: 'ag_1', name: '法律文书智能体', enabled: true },
+        { id: 'ag_2', name: '代码助手', enabled: true },
+      ],
+      models: [],
+      tools: [],
+    });
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '/agent 法律',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(sessions.switchAgent).toHaveBeenCalledWith('c1', 'ag_1');
+  });
+
+  it('/agent <不存在的名称> 提示未找到', async () => {
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '/agent 不存在的助手',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(sessions.switchAgent).not.toHaveBeenCalled();
+    expect(chatService.buildAgent).not.toHaveBeenCalled();
+    expect(sentTexts.some((s) => s.text.includes('未找到智能体'))).toBe(true);
+  });
+
+  it('超长回复按 4000 字符分段发送', async () => {
+    const long = 'x'.repeat(12_000);
+    const built = { created: {}, agent: { id: 'ag_1', name: '测试' } };
+    chatService.buildAgent.mockResolvedValue(built);
+    chatService.streamChat.mockImplementation(
+      async function* (): AsyncGenerator<ChatSseEvent> {
+        yield { choices: [{ delta: { role: 'assistant', content: long } }] };
+        yield '[DONE]';
+      },
+    );
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '来个长篇',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    // 3 段：各段前缀 （1/3）（2/3）（3/3），总字符 = 12000 + 前缀
+    const textMsgs = sentTexts.map((s) => s.text);
+    expect(textMsgs.filter((t) => /^（\d\/3）/u.test(t)).length).toBe(3);
+    const joined = textMsgs.join('');
+    expect(joined.replace(/（\d\/3）\n/gu, '').length).toBe(12_000);
+  });
+
+  it('短回复不分段（无前缀）', async () => {
+    const built = { created: {}, agent: { id: 'ag_1', name: '测试' } };
+    chatService.buildAgent.mockResolvedValue(built);
+    chatService.streamChat.mockImplementation(
+      async function* (): AsyncGenerator<ChatSseEvent> {
+        yield { choices: [{ delta: { role: 'assistant', content: '简短回复' } }] };
+        yield '[DONE]';
+      },
+    );
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: 'hi',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(sentTexts).toContainEqual({ chatId: 'c1', text: '简短回复' });
   });
 
   it('onModuleDestroy 停止长连接', async () => {

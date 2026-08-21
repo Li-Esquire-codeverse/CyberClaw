@@ -7,11 +7,16 @@ import type { ChatSseEvent } from '../../chat/chat.service';
  *   - reasoning_delta → 忽略（避免思考刷屏）
  *   - choices[].delta.content → 累积正文（不逐 token 发送，[DONE] 后整发）
  *   - tool_start → tool_status(running)；tool_end → tool_status(ok?)
- *   - [DONE] → flush() 返回最终正文（超长截断提示）
+ *   - [DONE] → flush() 返回最终正文（超长由发送层分段）
  *
- * 飞书文本消息上限较高，但防御性截断防止异常超长回复。
+ * 注：长文本不在此截断——飞书发送层（sendTextChunked）负责按
+ * 单条上限分段，保证完整送达。
  */
-const MAX_TEXT_LEN = 100_000;
+/**
+ * 飞书文本消息单条字符上限（保守值，远低于平台限制，避免中文多字节撑爆）。
+ * 发送层按此分段，保证长回复完整送达。
+ */
+export const FEISHU_TEXT_CHUNK_SIZE = 4000;
 
 export type RenderAction =
   | { kind: 'tool_status'; tool: string; ok?: boolean }
@@ -54,9 +59,6 @@ export class SseRenderer {
     this.done = true;
     const text = this.content.trim();
     if (!text) return null;
-    if (text.length > MAX_TEXT_LEN) {
-      return `${text.slice(0, MAX_TEXT_LEN)}\n…（回复过长已截断）`;
-    }
     return text;
   }
 }

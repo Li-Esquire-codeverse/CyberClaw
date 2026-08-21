@@ -26,11 +26,25 @@ describe('FeishuSessions', () => {
     expect(conv2).toBe(conv1);
   });
 
-  it('agentId 变化时 upsert 更新 agent（保留 conversationId）', () => {
+  it('agentId 变化时新建 conversationId（各 agent 独立上下文）', () => {
     const conv1 = sessions.getOrCreate('chat-1', 'ag_1');
     const conv2 = sessions.getOrCreate('chat-1', 'ag_2');
-    expect(conv2).toBe(conv1); // 会话保留
+    expect(conv2).not.toBe(conv1); // 新 agent → 新会话
     expect(sessions.get('chat-1')?.agentId).toBe('ag_2');
+  });
+
+  it('switchAgent 强制新建 conversationId 并更新 agent', () => {
+    const conv1 = sessions.getOrCreate('chat-1', 'ag_1');
+    const conv2 = sessions.switchAgent('chat-1', 'ag_2');
+    expect(conv2).not.toBe(conv1);
+    expect(sessions.get('chat-1')?.agentId).toBe('ag_2');
+    expect(sessions.get('chat-1')?.conversationId).toBe(conv2);
+  });
+
+  it('switchAgent 后同 agent 走 getOrCreate 复用新会话', () => {
+    sessions.switchAgent('chat-1', 'ag_2');
+    const conv = sessions.getOrCreate('chat-1', 'ag_2');
+    expect(conv).toBe(sessions.get('chat-1')?.conversationId);
   });
 
   it('不同 chat_id 映射到不同会话', () => {

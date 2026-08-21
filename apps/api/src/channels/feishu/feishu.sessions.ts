@@ -22,6 +22,8 @@ export interface FeishuSessionStore {
   upsert(session: FeishuSession): void;
   /** 获取或创建映射：返回 conversationId */
   getOrCreate(chatId: string, agentId: string): string;
+  /** 切换智能体：更新 agentId 并新建 conversationId（各 agent 独立上下文） */
+  switchAgent(chatId: string, agentId: string): string;
 }
 
 /** 基于 better-sqlite3 的持久化实现（与 conversations 同库文件） */
@@ -90,12 +92,27 @@ export class FeishuSessions implements FeishuSessionStore {
     if (existing && existing.agentId === agentId) {
       return existing.conversationId;
     }
-    const conversationId = existing?.conversationId ?? `conv-${randomUUID()}`;
+    // agentId 变化（含首次）→ 新建 conversationId，避免新 agent 读到旧 agent 历史
+    const conversationId = `conv-${randomUUID()}`;
     this.upsert({
       chatId,
       conversationId,
       agentId,
       createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+    });
+    return conversationId;
+  }
+
+  /** 显式切换智能体：更新 agentId 并新建 conversationId（各 agent 独立上下文） */
+  switchAgent(chatId: string, agentId: string): string {
+    const now = new Date().toISOString();
+    const conversationId = `conv-${randomUUID()}`;
+    this.upsert({
+      chatId,
+      conversationId,
+      agentId,
+      createdAt: now,
       updatedAt: now,
     });
     return conversationId;
