@@ -5,9 +5,10 @@ import { dirname, join } from 'node:path';
 import { ClawModule } from '../claw/claw.module';
 import { findRepoRoot } from '@cyberclaw/agent-core';
 import { ChatController } from './chat.controller';
-import { ChatService, CHAT_CHECKPOINTER } from './chat.service';
+import { ChatService, CHAT_CHECKPOINTER, CHAT_TOOL_EXECUTORS } from './chat.service';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsStore, CONVERSATIONS_STORE } from './conversations.store';
+import { createToolExecutors } from '../tools/tool-executors';
 
 /**
  * AI 助手对话模块：读取 CyberClaw 配置 + langchain createAgent，
@@ -41,6 +42,11 @@ const dbPathOf = (): string => {
     {
       provide: CONVERSATIONS_STORE,
       useFactory: () => new ConversationsStore(dbPathOf()),
+    },
+    {
+      // 真实工具执行器（web-search / translate），按工具名注册
+      provide: CHAT_TOOL_EXECUTORS,
+      useFactory: () => createToolExecutors(),
     },
   ],
   exports: [ChatService],
