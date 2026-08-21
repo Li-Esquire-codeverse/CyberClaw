@@ -6,7 +6,12 @@ import { ModelsController } from './models.controller';
 import { ToolsController } from './tools.controller';
 
 @Module({
-  controllers: [AgentsController, ClawConfigController, ModelsController, ToolsController],
+  controllers: [
+    AgentsController,
+    ClawConfigController,
+    ModelsController,
+    ToolsController,
+  ],
   providers: [ClawConfigService],
   exports: [ClawConfigService],
 })

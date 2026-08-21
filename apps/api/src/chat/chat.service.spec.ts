@@ -17,6 +17,7 @@ import {
 } from './chat.service';
 import { ClawConfigService } from '../claw/claw-config.service';
 import { CONVERSATIONS_STORE } from './conversations.store';
+import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
 import type { ClawAgent } from '../claw/claw.types';
 
 // @cyberclaw/agent-core 为 ESM 包，ChatService 内部用动态 import 加载，
@@ -73,6 +74,9 @@ function builtAgentOf(agent: ClawAgent = sampleAgent): BuiltAgent {
 describe('ChatService', () => {
   let service: ChatService;
   const configService = { loadConfig: jest.fn() };
+  const memoryStore = {
+    buildPromptInjection: jest.fn(),
+  } as unknown as MemoryStore;
   const conversationsStore = {
     list: jest.fn(() => []),
     upsert: jest.fn((input: unknown) => ({
@@ -93,12 +97,17 @@ describe('ChatService', () => {
         { provide: ClawConfigService, useValue: configService },
         { provide: CHAT_TOOL_EXECUTORS, useValue: {} },
         { provide: CONVERSATIONS_STORE, useValue: conversationsStore },
+        { provide: MEMORY_STORE, useValue: memoryStore },
       ],
     }).compile();
     service = moduleRef.get(ChatService);
   });
 
   describe('buildAgent', () => {
+    beforeEach(() => {
+      memoryStore.buildPromptInjection = jest.fn().mockResolvedValue(null);
+    });
+
     it('根据智能体配置调用 createLangchainAgent（modelId/systemPrompt/配置/记忆）', async () => {
       createLangchainAgentMock.mockResolvedValue(builtAgentOf().created);
       const result = await service.buildAgent('ag_1');
@@ -140,6 +149,54 @@ describe('ChatService', () => {
       await expect(service.buildAgent('ag_1')).rejects.toThrow(
         UnprocessableEntityException,
       );
+    });
+
+    it('记忆非空时拼入 systemPrompt（注入生效）', async () => {
+      memoryStore.buildPromptInjection = jest
+        .fn()
+        .mockResolvedValue({
+          header: '【长期记忆】以下是关于用户的信息：',
+          body: '- 2026-08-21 用户是一名律师',
+        });
+      createLangchainAgentMock.mockResolvedValue(builtAgentOf().created);
+
+      await service.buildAgent('ag_1');
+      const callArgs = createLangchainAgentMock.mock.calls[0][0];
+      expect(callArgs.systemPrompt).toContain('【长期记忆】');
+      expect(callArgs.systemPrompt).toContain('用户是一名律师');
+      // 智能体自身提示词保留
+      expect(callArgs.systemPrompt).toContain('你是测试助手');
+    });
+
+    it('MEMORY_INJECT=0 时不注入记忆', async () => {
+      const prev = process.env.MEMORY_INJECT;
+      process.env.MEMORY_INJECT = '0';
+      try {
+        memoryStore.buildPromptInjection = jest
+          .fn()
+          .mockResolvedValue({
+            header: '【长期记忆】',
+            body: '不应出现',
+          });
+        createLangchainAgentMock.mockResolvedValue(builtAgentOf().created);
+
+        await service.buildAgent('ag_1');
+        const callArgs = createLangchainAgentMock.mock.calls[0][0];
+        expect(callArgs.systemPrompt).toBe('你是测试助手');
+        expect(callArgs.systemPrompt).not.toContain('【长期记忆】');
+      } finally {
+        if (prev === undefined) delete process.env.MEMORY_INJECT;
+        else process.env.MEMORY_INJECT = prev;
+      }
+    });
+
+    it('记忆为空（injection=null）时 systemPrompt 保持原样', async () => {
+      memoryStore.buildPromptInjection = jest.fn().mockResolvedValue(null);
+      createLangchainAgentMock.mockResolvedValue(builtAgentOf().created);
+
+      await service.buildAgent('ag_1');
+      const callArgs = createLangchainAgentMock.mock.calls[0][0];
+      expect(callArgs.systemPrompt).toBe('你是测试助手');
     });
   });
 
