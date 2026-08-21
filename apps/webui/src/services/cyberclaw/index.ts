@@ -140,6 +140,25 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: true,
     icon: 'database',
+    parameters: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['add', 'search', 'list'],
+          description: '要执行的操作',
+        },
+        text: { type: 'string', description: 'add 时：要记住的内容' },
+        target: {
+          type: 'string',
+          enum: ['memory', 'user'],
+          description: 'add 写入位置：memory=长期记忆（默认），user=用户画像',
+        },
+        query: { type: 'string', description: 'search 时：检索关键词' },
+        limit: { type: 'integer', description: 'search 返回条数（默认 5，最大 10）' },
+      },
+      required: ['operation'],
+    },
   },
   {
     name: 'code-interpreter',

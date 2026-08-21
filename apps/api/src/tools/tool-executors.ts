@@ -3,6 +3,8 @@ import { webSearchExecutor } from './web-search.executor';
 import { translateExecutor } from './translate.executor';
 import { fileOpsExecutor } from './file-ops.executor';
 import { shellExecutor } from './shell.executor';
+import { MemoryStore, MEMORY_STORE, defaultMemoryStore } from '../memory/memory.store';
+import { createMemoryExecutor } from './memory.executor';
 
 /**
  * 真实工具执行器注册表（注入到 CHAT_TOOL_EXECUTORS）。
@@ -15,12 +17,17 @@ import { shellExecutor } from './shell.executor';
  *   - GOOGLE_TRANSLATE_ENDPOINT：translate 自定义翻译端点（缺省 Google 免费端点，兜底 MyMemory）
  *   - FILE_OPS_ROOT：file-ops 允许访问的工作区根（缺省 monorepo 根）
  *   - SHELL_ROOT：shell 的 cwd 限制根（缺省 monorepo 根）
+ *   - MEMORY_JOURNAL_DAYS：memory search 检索近几天日记（缺省 3）
  */
-export function createToolExecutors(): Record<string, ToolExecutor> {
+export function createToolExecutors(
+  memoryStore: MemoryStore = defaultMemoryStore,
+): Record<string, ToolExecutor> {
   return {
     'web-search': webSearchExecutor,
     translate: translateExecutor,
     'file-ops': fileOpsExecutor,
     shell: shellExecutor,
+    // memory 工具与 ChatService 注入共用同一 store 实例（写队列统一）
+    memory: createMemoryExecutor(memoryStore),
   };
 }

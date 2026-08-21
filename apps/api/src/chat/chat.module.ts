@@ -9,6 +9,7 @@ import { ChatService, CHAT_CHECKPOINTER, CHAT_TOOL_EXECUTORS } from './chat.serv
 import { ConversationsController } from './conversations.controller';
 import { ConversationsStore, CONVERSATIONS_STORE } from './conversations.store';
 import { createToolExecutors } from '../tools/tool-executors';
+import { MemoryModule } from '../memory/memory.module';
 
 /**
  * AI 助手对话模块：读取 CyberClaw 配置 + langchain createAgent，
@@ -24,7 +25,7 @@ const dbPathOf = (): string => {
 };
 
 @Module({
-  imports: [ClawModule],
+  imports: [ClawModule, MemoryModule],
   controllers: [ChatController, ConversationsController],
   providers: [
     ChatService,
@@ -44,10 +45,12 @@ const dbPathOf = (): string => {
       useFactory: () => new ConversationsStore(dbPathOf()),
     },
     {
-      // 真实工具执行器（web-search / translate），按工具名注册
+      // 真实工具执行器（web-search / translate / file-ops / shell / memory），按工具名注册
       provide: CHAT_TOOL_EXECUTORS,
       useFactory: () => createToolExecutors(),
     },
+    // 长期记忆存储单例（MEMORY_STORE）由 MemoryModule 提供：
+    // ChatService 注入读，memory 工具引用同一 defaultMemoryStore 写
   ],
   exports: [ChatService],
 })

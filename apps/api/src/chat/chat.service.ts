@@ -25,6 +25,7 @@ import type {
 } from '@cyberclaw/agent-core';
 import type { BaseCheckpointSaver } from '@cyberclaw/agent-core';
 import { ClawConfigService } from '../claw/claw-config.service';
+import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
 import type { ClawAgent } from '../claw/claw.types';
 import type { ChatMessageDto } from './chat.dto';
 
@@ -147,6 +148,10 @@ export class ChatService {
     @Optional()
     @Inject(CHAT_TOOL_EXECUTORS)
     private readonly toolExecutors: Record<string, ToolExecutor> = {},
+    /** 长期记忆存储（可选，未注入时跳过记忆注入） */
+    @Optional()
+    @Inject(MEMORY_STORE)
+    private readonly memoryStore: MemoryStore | undefined,
     /** 对话记忆存储（默认 MemorySaver 进程内；生产可注入 SQLite/Postgres saver） */
     @Optional()
     @Inject(CHAT_CHECKPOINTER)
@@ -188,10 +193,27 @@ export class ChatService {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { createLangchainAgent } =
       require('@cyberclaw/agent-core') as typeof import('@cyberclaw/agent-core');
+
+    // 长期记忆注入：读 MEMORY.md + USER.md 拼入 systemPrompt（每次请求现构建 → 历史回显/新会话天然最新）。
+    // MEMORY_INJECT=0 可关闭（恢复纯智能体提示词行为）。
+    let systemPrompt = agent.systemPrompt;
+    if (process.env.MEMORY_INJECT !== '0' && this.memoryStore) {
+      const injection = await this.memoryStore.buildPromptInjection();
+      if (injection) {
+        systemPrompt = [
+          agent.systemPrompt,
+          injection.header,
+          injection.body,
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+      }
+    }
+
     const created = await createLangchainAgent({
       config,
       modelId: agent.modelId,
-      systemPrompt: agent.systemPrompt,
+      systemPrompt,
       toolExecutors: this.toolExecutors,
       checkpointer: this.checkpointer,
     });
