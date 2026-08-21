@@ -53,6 +53,8 @@ export interface ClawTool {
   builtin: boolean;
   enabled: boolean;
   icon?: string;
+  /** 参数 JSON Schema（下发工具声明给 LLM） */
+  parameters?: Record<string, unknown>;
 }
 
 /** 整体配置结构（对应 imooc_claw.json） */
@@ -71,6 +73,14 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: true,
     icon: 'search',
+    parameters: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '搜索查询关键词，可包含多个关键词以空格分隔' },
+        numResults: { type: 'integer', description: '返回结果条数（1-10，默认 5）' },
+      },
+      required: ['query'],
+    },
   },
   {
     name: 'browser',
@@ -87,6 +97,24 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: true,
     icon: 'folder',
+    parameters: {
+      type: 'object',
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['read', 'write', 'list', 'mkdir', 'move', 'delete', 'stat'],
+          description: '要执行的操作',
+        },
+        path: { type: 'string', description: '目标文件/目录路径（相对工作区根，禁止 .. 越界）' },
+        content: { type: 'string', description: '写入内容（write 时必填）' },
+        target: { type: 'string', description: '目标路径（move 时必填）' },
+        recursive: {
+          type: 'boolean',
+          description: '是否递归（delete 删目录 / mkdir 嵌套 / list 列子树时用）',
+        },
+      },
+      required: ['operation', 'path'],
+    },
   },
   {
     name: 'shell',
@@ -95,6 +123,15 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: false,
     icon: 'console-sql',
+    parameters: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: '要执行的命令' },
+        timeoutSec: { type: 'integer', description: '超时秒数（默认 30，最大 120）' },
+        cwd: { type: 'string', description: '工作目录（相对工作区根，默认工作区根）' },
+      },
+      required: ['command'],
+    },
   },
   {
     name: 'memory',
@@ -127,6 +164,15 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: true,
     icon: 'translation',
+    parameters: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: '要翻译的原文' },
+        targetLang: { type: 'string', description: '目标语言代码，如 zh-CN / en / ja / ko / fr / de（默认 zh-CN）' },
+        sourceLang: { type: 'string', description: '源语言代码，auto 表示自动检测（默认 auto）' },
+      },
+      required: ['text'],
+    },
   },
 ];
 

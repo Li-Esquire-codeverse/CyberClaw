@@ -1,0 +1,26 @@
+import type { ToolExecutor } from '@cyberclaw/agent-core';
+import { webSearchExecutor } from './web-search.executor';
+import { translateExecutor } from './translate.executor';
+import { fileOpsExecutor } from './file-ops.executor';
+import { shellExecutor } from './shell.executor';
+
+/**
+ * 真实工具执行器注册表（注入到 CHAT_TOOL_EXECUTORS）。
+ *
+ * 每个执行器按工具名注册；未注册的工具由 agent-core 返回
+ * 「[工具未实现]」占位错误（agent 可据此继续作答）。
+ *
+ * 环境变量配置：
+ *   - TAVILY_API_KEY / BRAVE_API_KEY：web-search 搜索提供商（缺省用 DuckDuckGo）
+ *   - GOOGLE_TRANSLATE_ENDPOINT：translate 自定义翻译端点（缺省 Google 免费端点，兜底 MyMemory）
+ *   - FILE_OPS_ROOT：file-ops 允许访问的工作区根（缺省 monorepo 根）
+ *   - SHELL_ROOT：shell 的 cwd 限制根（缺省 monorepo 根）
+ */
+export function createToolExecutors(): Record<string, ToolExecutor> {
+  return {
+    'web-search': webSearchExecutor,
+    translate: translateExecutor,
+    'file-ops': fileOpsExecutor,
+    shell: shellExecutor,
+  };
+}

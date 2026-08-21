@@ -122,6 +122,8 @@ class CyberClawChatProvider extends AbstractChatProvider<
           if (running) {
             running.status = payload.ok ? 'success' : 'error';
             running.result = payload.result;
+            // 完整参数回填（tool_start 时可能只有分片）
+            if (payload.args) running.args = payload.args;
           }
         }
       }

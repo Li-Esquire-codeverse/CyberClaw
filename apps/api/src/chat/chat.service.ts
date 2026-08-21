@@ -92,7 +92,11 @@ function isModelChunk(chunk: unknown): chunk is StreamedChunkLike & {
 /** 工具执行结果（ToolMessage） */
 function isToolMessage(
   chunk: unknown,
-): chunk is StreamedChunkLike & { name?: string; content: unknown } {
+): chunk is StreamedChunkLike & {
+  name?: string;
+  content: unknown;
+  tool_call_id: string;
+} {
   return (
     typeof chunk === 'object' &&
     chunk !== null &&
@@ -241,6 +245,9 @@ export class ChatService {
     yield { event: 'agent_start', agentId: agent.id, agentName: agent.name };
 
     const seenToolIds = new Set<string>();
+    // 流式工具参数累积：tool_call_chunks 分片到达，首个 chunk 只有 id+name，
+    // 参数片段逐块追加，tool_end 时回填完整参数供前端展示
+    const toolArgs = new Map<string, string>();
     // 注：langchain 新版 stream() 的泛型推断（TEncoding/TStreamMode）存在缺陷，
     // 运行时实际形状为 [BaseMessage, metadata] 二元组（StreamMessageOutput），
     // 这里按运行时形状显式断言。
@@ -270,14 +277,18 @@ export class ChatService {
         if (text) {
           yield { choices: [{ delta: { role: 'assistant', content: text } }] };
         }
-        // 工具调用参数流式到来，首个带 name 的 chunk 触发 tool_start
+        // 工具调用参数流式到来：先累积参数分片，首个带 name 的 chunk 触发 tool_start
         for (const tc of chunk.tool_call_chunks) {
-          if (tc.id && tc.name && !seenToolIds.has(tc.id)) {
+          if (!tc.id) continue;
+          if (tc.args) {
+            toolArgs.set(tc.id, `${toolArgs.get(tc.id) ?? ''}${tc.args}`);
+          }
+          if (tc.name && !seenToolIds.has(tc.id)) {
             seenToolIds.add(tc.id);
             yield {
               event: 'tool_start',
               tool: tc.name,
-              args: tc.args?.slice(0, 500),
+              args: (toolArgs.get(tc.id) ?? '').slice(0, 500),
             };
           }
         }
@@ -290,6 +301,10 @@ export class ChatService {
           event: 'tool_end',
           tool: chunk.name ?? 'tool',
           ok,
+          // 完整参数回填（tool_start 时可能只收到首个分片）
+          args: chunk.tool_call_id
+            ? (toolArgs.get(chunk.tool_call_id) ?? '').slice(0, 500)
+            : undefined,
           result: content.slice(0, TOOL_RESULT_MAX_LEN),
         };
       }

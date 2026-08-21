@@ -241,6 +241,7 @@ describe('ChatService', () => {
         event: 'tool_end',
         tool: 'echo',
         ok: true,
+        args: '{"text":"hi"}',
         result: 'echo:hi',
       });
       expect(events[3]).toEqual({
