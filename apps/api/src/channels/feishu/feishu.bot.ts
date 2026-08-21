@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ClawConfigService } from '../../claw/claw-config.service';
 import { ChatService } from '../../chat/chat.service';
-import { SseRenderer } from './feishu.renderer';
+import { SseRenderer, FEISHU_TEXT_CHUNK_SIZE } from './feishu.renderer';
 import type { FeishuClientPort, FeishuIncomingMessage } from './feishu.lark-client';
 import type { FeishuSessionStore } from './feishu.sessions';
 
@@ -56,16 +56,94 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
     return enabled?.id;
   }
 
+  /**
+   * 处理 /agent 命令：
+   *   - `/agent` 或 `/agent list` → 列出所有启用智能体
+   *   - `/agent <名称|ID>` → 切换到对应智能体（新建会话，独立上下文）
+   * 返回是否已作为命令消费（true 时调用方不再走对话流程）。
+   */
+  private async handleAgentCommand(
+    chatId: string,
+    raw: string,
+  ): Promise<boolean> {
+    const text = raw.trim();
+    if (!text.startsWith('/agent')) return false;
+
+    const config = this.configService.loadConfig();
+    const enabled = config.agents.filter((a) => a.enabled);
+
+    const args = text.replace(/^\/agent\s*/, '').trim();
+
+    // 列出可用智能体
+    if (!args || args === 'list' || args === 'help') {
+      if (enabled.length === 0) {
+        await this.client!.sendText(chatId, '⚠️ 当前没有可用的智能体，请先在配置中创建并启用');
+      } else {
+        const lines = enabled.map((a) => `- ${a.name}（${a.id}）`);
+        await this.client!.sendText(
+          chatId,
+          `📋 可用智能体：\n${lines.join('\n')}\n\n发送 /agent <名称或ID> 切换`,
+        );
+      }
+      return true;
+    }
+
+    // 匹配：ID 精确 → 名称精确 → 名称包含（忽略大小写）
+    const target =
+      enabled.find((a) => a.id === args) ??
+      enabled.find((a) => a.name === args) ??
+      enabled.find((a) => a.name.toLowerCase().includes(args.toLowerCase()));
+
+    if (!target) {
+      await this.client!.sendText(
+        chatId,
+        `⚠️ 未找到智能体「${args}」。发送 /agent 查看可用列表`,
+      );
+      return true;
+    }
+
+    const conversationId = this.sessions.switchAgent(chatId, target.id);
+    // 同步到 WebUI 会话列表（新会话标题标记来源）
+    try {
+      this.chatService.upsertConversation({
+        id: conversationId,
+        agentId: target.id,
+        title: `飞书会话（切换至 ${target.name}）`,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`切换智能体后同步 WebUI 列表失败: ${message}`);
+    }
+    await this.client!.sendText(chatId, `✅ 已切换到智能体「${target.name}」，新会话已开始`);
+    return true;
+  }
+
+  /** 按单条上限分段发送长文本（每段加 (i/n) 前缀，n=1 时不加） */
+  async sendTextChunked(chatId: string, text: string): Promise<void> {
+    if (!this.client) return;
+    if (text.length <= FEISHU_TEXT_CHUNK_SIZE) {
+      await this.client.sendText(chatId, text);
+      return;
+    }
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += FEISHU_TEXT_CHUNK_SIZE) {
+      chunks.push(text.slice(i, i + FEISHU_TEXT_CHUNK_SIZE));
+    }
+    for (let i = 0; i < chunks.length; i++) {
+      const prefix = chunks.length > 1 ? `（${i + 1}/${chunks.length}）\n` : '';
+      await this.client.sendText(chatId, `${prefix}${chunks[i]}`);
+    }
+  }
+
   private allowed(openId: string): boolean {
     const raw = process.env.FEISHU_ALLOWED_USERS?.trim();
     if (!raw) return true;
     return raw.split(',').map((s) => s.trim()).includes(openId);
   }
 
-  /** 供调度等模块推送消息到指定飞书会话（无 client 时静默跳过） */
+  /** 供调度等模块推送消息到指定飞书会话（无 client 时静默跳过；长文自动分段） */
   async sendTextToChat(chatId: string, text: string): Promise<void> {
-    if (!this.client) return;
-    await this.client.sendText(chatId, text);
+    await this.sendTextChunked(chatId, text);
   }
 
   async handleMessage(msg: FeishuIncomingMessage): Promise<void> {
@@ -78,6 +156,9 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
     // 白名单
     if (!this.allowed(msg.senderOpenId)) return;
 
+    // /agent 命令：切换智能体（不进入对话流程）
+    if (await this.handleAgentCommand(msg.chatId, msg.text)) return;
+
     const agentId = this.resolveAgentId();
     if (!agentId) {
       await this.client.sendText(msg.chatId, '⚠️ 没有可用的智能体，请先在配置中创建并启用');
@@ -85,6 +166,18 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
     }
 
     const conversationId = this.sessions.getOrCreate(msg.chatId, agentId);
+
+    // 同步到 WebUI 会话列表（conversations 表）：飞书会话在 WebUI 可见、可查看历史
+    try {
+      this.chatService.upsertConversation({
+        id: conversationId,
+        agentId,
+        title: msg.text.trim().slice(0, 30),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`飞书会话同步到 WebUI 列表失败: ${message}`);
+    }
 
     try {
       const built = await this.chatService.buildAgent(agentId);
@@ -105,7 +198,7 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
       }
       const finalText = renderer.flush();
       if (finalText) {
-        await this.client.sendText(msg.chatId, finalText);
+        await this.sendTextChunked(msg.chatId, finalText);
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

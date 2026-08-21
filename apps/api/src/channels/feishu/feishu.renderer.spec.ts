@@ -37,14 +37,11 @@ describe('SseRenderer', () => {
     ).toEqual([{ kind: 'tool_status', tool: 'web-search', ok: true }]);
   });
 
-  it('超长正文截断并提示', () => {
+  it('超长正文完整返回（由发送层分段，不在渲染层截断）', () => {
     const r = new SseRenderer();
-    r.ingest({
-      choices: [{ delta: { role: 'assistant', content: 'x'.repeat(100_500) } }],
-    });
-    const out = r.flush();
-    expect(out).toContain('截断');
-    expect(out!.length).toBeLessThan(100_100);
+    const long = 'x'.repeat(100_500);
+    r.ingest({ choices: [{ delta: { role: 'assistant', content: long } }] });
+    expect(r.flush()).toBe(long);
   });
 
   it('无内容 flush 返回 null', () => {
