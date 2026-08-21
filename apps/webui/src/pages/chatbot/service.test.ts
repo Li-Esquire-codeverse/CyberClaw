@@ -84,6 +84,20 @@ describe('conversations API', () => {
     expect(history).toHaveLength(2);
     expect(history[1]).toMatchObject({ thinkContent: '想一下' });
   });
+
+  it('loadHistory 失败时抛出带后端错误信息的异常（不静默）', async () => {
+    mockRequest.mockRejectedValue({
+      response: { data: { message: '智能体「法律文书智能体」关联的大模型未启用' } },
+    });
+    await expect(loadHistory('ag_1', 'conv-1')).rejects.toThrow(
+      '智能体「法律文书智能体」关联的大模型未启用',
+    );
+  });
+
+  it('loadHistory 失败且无后端信息时抛出通用错误', async () => {
+    mockRequest.mockRejectedValue(new Error('Network Error'));
+    await expect(loadHistory('ag_1', 'conv-1')).rejects.toThrow('Network Error');
+  });
 });
 
 describe('CyberClawChatProvider.transformParams', () => {

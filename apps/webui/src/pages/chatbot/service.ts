@@ -206,8 +206,12 @@ export async function loadHistory(
       { method: 'GET', skipErrorHandler: true },
     );
     return Array.isArray(res) ? res : [];
-  } catch {
-    return [];
+  } catch (err) {
+    // 提取后端校验错误（如「智能体关联的大模型未启用」），供页面提示而非静默清空历史
+    const detail =
+      (err as { response?: { data?: { message?: string } } }).response?.data
+        ?.message ?? (err as Error).message ?? '未知错误';
+    throw new Error(detail);
   }
 }
 

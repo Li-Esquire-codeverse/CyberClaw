@@ -282,11 +282,19 @@ const ChatbotPage: React.FC = () => {
       conversationKey: key,
     }: { conversationKey?: string }) => {
       if (!agentId || !key) return [];
-      const history = await loadHistory(agentId, String(key));
-      return history.map((m) => ({
-        message: m as ChatAgentMessage,
-        status: 'local' as const,
-      }));
+      try {
+        const history = await loadHistory(agentId, String(key));
+        return history.map((m) => ({
+          message: m as ChatAgentMessage,
+          status: 'local' as const,
+        }));
+      } catch (e) {
+        // 历史加载失败（如智能体关联模型未启用）：明确提示，避免静默无反应
+        message.error(
+          `历史加载失败：${(e as Error).message || '请检查智能体/模型配置'}`,
+        );
+        return [];
+      }
     },
     requestPlaceholder: { role: 'assistant', content: '' },
   });
