@@ -1,3 +1,6 @@
+// 必须在任何业务模块 import 之前加载 .env（副作用 import，置于最顶部）
+import './config/env';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
