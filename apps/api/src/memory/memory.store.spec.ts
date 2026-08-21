@@ -146,4 +146,17 @@ describe('MemoryStore', () => {
     expect(stats.journalCount).toBeGreaterThanOrEqual(1);
     expect(stats.lastUpdated).toBeTruthy();
   });
+
+  it('pruneJournal 删除过期日记，保留近期', async () => {
+    await store.appendJournal('很旧的日记', '2020-01-01');
+    await store.appendJournal('昨天的日记', '2026-08-20');
+    const removed = await store.pruneJournal(30);
+    expect(removed).toBe(1);
+    expect(await store.readJournal('2020-01-01')).toBe('');
+    expect(await store.readJournal('2026-08-20')).toContain('昨天的日记');
+  });
+
+  it('pruneJournal 无 journal 目录时返回 0 不报错', async () => {
+    expect(await store.pruneJournal(30)).toBe(0);
+  });
 });

@@ -1,4 +1,4 @@
-import { appendFile, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { findMonorepoRoot } from '../claw/config-path';
 import { searchTexts, type SearchEntry } from './search';
@@ -246,6 +246,27 @@ export class MemoryStore {
       journalCount: journalFiles.filter((f) => f.endsWith('.md')).length,
       lastUpdated: lastUpdated > 0 ? new Date(lastUpdated).toISOString() : undefined,
     };
+  }
+
+  /**
+   * 清理 retentionDays 之前的 journal 文件（调度内置任务使用）。
+   * 返回删除的文件数。
+   */
+  async pruneJournal(retentionDays: number): Promise<number> {
+    const dir = this.journalDir();
+    const files = await safeReaddir(dir);
+    const cutoff = Date.now() - retentionDays * 86_400_000;
+    let removed = 0;
+    for (const f of files) {
+      if (!f.endsWith('.md')) continue;
+      const day = f.slice(0, 10);
+      const t = new Date(`${day}T00:00:00Z`).getTime();
+      if (!Number.isNaN(t) && t < cutoff) {
+        await rm(join(dir, f), { force: true }).catch(() => undefined);
+        removed++;
+      }
+    }
+    return removed;
   }
 }
 
