@@ -26,6 +26,8 @@ import type {
 import type { BaseCheckpointSaver } from '@cyberclaw/agent-core';
 import { ClawConfigService } from '../claw/claw-config.service';
 import { RouterService } from '../routing/router.service';
+import { CompactStore } from '../compaction/compact.store';
+import { maybeCompact } from '../compaction/compact';
 import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
 import type { ClawAgent } from '../claw/claw.types';
 import type { ChatMessageDto } from './chat.dto';
@@ -165,6 +167,9 @@ export class ChatService {
     /** 多 agent 路由（可选：未注册路由模块时退化为单智能体原行为） */
     @Optional()
     private readonly routerService?: RouterService,
+    /** 压缩摘要存储（可选：未注入时压缩预处理跳过，行为与 Phase 3 一致） */
+    @Optional()
+    private readonly compactStore?: CompactStore,
   ) {}
 
   /**
@@ -189,8 +194,13 @@ export class ChatService {
    * 读取配置并构建 langchain agent。
    * 校验失败时抛 HttpException（Nest 返回普通 JSON 错误响应）；
    * 只有构建成功后，调用方才开启 SSE 流。
+   *
+   * options.extraSystemPrompt：追加到 systemPrompt 末尾（Phase 4 C2 压缩摘要注入）。
    */
-  async buildAgent(agentId: string): Promise<BuiltAgent> {
+  async buildAgent(
+    agentId: string,
+    options?: { extraSystemPrompt?: string },
+  ): Promise<BuiltAgent> {
     const config = this.configService.loadConfig();
     const agent = config.agents.find((a) => a.id === agentId);
     if (!agent) {
@@ -230,6 +240,13 @@ export class ChatService {
           .filter(Boolean)
           .join('\n\n');
       }
+    }
+    // 压缩摘要注入（Phase 4 C2）：摘要 + 近期上下文以文本追加到 systemPrompt，
+    // 不进入线程状态（graph 只收当条新消息，避免 langgraph reducer 重复追加）。
+    if (options?.extraSystemPrompt) {
+      systemPrompt = [systemPrompt, options.extraSystemPrompt]
+        .filter(Boolean)
+        .join('\n\n');
     }
 
     const created = await createLangchainAgent({
@@ -278,12 +295,22 @@ export class ChatService {
     messages: ChatMessageDto[],
     signal?: AbortSignal,
     conversationId?: string,
+    skipCompaction?: boolean,
   ): AsyncGenerator<ChatSseEvent, void, void> {
-    const { created, agent } = built;
+    let { created, agent } = built;
 
     const history = this.toLangchainMessages(messages);
     if (history.length === 0) {
       throw new UnprocessableEntityException('消息列表不能为空');
+    }
+
+    const threadId = conversationId || `agent:${agent.id}`;
+
+    // 压缩预处理（Phase 4 C2）：基于线程历史判定，命中时重建带摘要的 agent。
+    // 摘要生成路径（skipCompaction=true）直接跳过，避免无限递归。
+    if (!skipCompaction && this.compactStore) {
+      built = await this.applyCompaction(built, threadId);
+      ({ created, agent } = built);
     }
 
     yield { event: 'agent_start', agentId: agent.id, agentName: agent.name };
@@ -295,7 +322,6 @@ export class ChatService {
     // 注：langchain 新版 stream() 的泛型推断（TEncoding/TStreamMode）存在缺陷，
     // 运行时实际形状为 [BaseMessage, metadata] 二元组（StreamMessageOutput），
     // 这里按运行时形状显式断言。
-    const threadId = conversationId || `agent:${agent.id}`;
     const stream = (await created.agent.stream(
       { messages: history },
       {
@@ -395,6 +421,64 @@ export class ChatService {
       // system / tool 消息不参与回显
     }
     return messages;
+  }
+
+  /**
+   * 压缩预处理（Phase 4 C2）：
+   *   - 从线程状态恢复完整历史（history 必须是线程消息，而非当条 messages）
+   *   - 超阈值 → maybeCompact（复用库中摘要 / 生成一次并写库）
+   *   - 有摘要 → 重建带【历史对话摘要 + 近期上下文】systemPrompt 的 agent
+   */
+  private async applyCompaction(
+    built: BuiltAgent,
+    threadId: string,
+  ): Promise<BuiltAgent> {
+    const agent = built.created.agent as unknown as {
+      getState: (config: object) => Promise<{ values: { messages: unknown[] } }>;
+    };
+    const state = await agent.getState({
+      configurable: { thread_id: threadId },
+    });
+    const history = this.threadMessagesToDtos(state.values.messages ?? []);
+    if (history.length === 0) return built;
+
+    const result = await maybeCompact({
+      history,
+      agent: built,
+      chatService: this,
+      conversationId: threadId,
+      store: this.compactStore!,
+    });
+    if (!result.summary) return built;
+
+    const extra = [
+      '【历史对话摘要】',
+      result.summary,
+      '',
+      '【近期对话上下文】',
+      ...result.kept.map((m) => `${m.role}: ${m.content}`),
+    ].join('\n');
+    return this.buildAgent(built.agent.id, { extraSystemPrompt: extra });
+  }
+
+  /** 线程状态消息 → ChatMessageDto（只取 user/assistant，system/tool 跳过避免污染摘要） */
+  private threadMessagesToDtos(messages: unknown[]): ChatMessageDto[] {
+    const out: ChatMessageDto[] = [];
+    for (const m of messages) {
+      const type = messageTypeOf(m);
+      if (type === 'human') {
+        out.push({
+          role: 'user',
+          content: String((m as { content: unknown }).content),
+        });
+      } else if (type === 'ai') {
+        out.push({
+          role: 'assistant',
+          content: String((m as { content: unknown }).content),
+        });
+      }
+    }
+    return out;
   }
 
   /** 会话列表（按更新时间倒序） */

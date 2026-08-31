@@ -46,9 +46,14 @@ export async function summarizeHistory(input: {
   const prompt = SUMMARIZE_PROMPT + transcript;
 
   let summary = '';
-  for await (const evt of chatService.streamChat(agent, [
-    { role: 'user', content: prompt },
-  ])) {
+  // skipCompaction=true：摘要生成路径跳过压缩预处理，防止长线程下无限递归
+  for await (const evt of chatService.streamChat(
+    agent,
+    [{ role: 'user', content: prompt }],
+    undefined,
+    undefined,
+    true,
+  )) {
     if (evt === '[DONE]') break;
     if ('choices' in evt && evt.choices[0]?.delta?.content) {
       summary += evt.choices[0].delta.content;
