@@ -116,6 +116,44 @@ describe('ClawConfigService', () => {
     expect(updated.createdAt).toBe(agent.createdAt);
   });
 
+  // ==================== 路由关键词（Phase 4 A2） ====================
+
+  it('persists keywords when creating an agent (round-trip)', async () => {
+    const modelId = await addModel();
+    const agent = await service.createAgent({
+      name: '法律文书',
+      modelId,
+      tools: ['web-search'],
+      keywords: ['合同', '律师'],
+    });
+
+    expect(agent.keywords).toEqual(['合同', '律师']);
+    const onDisk = JSON.parse(readFileSync(configPath, 'utf-8'));
+    expect(onDisk.agents[0].keywords).toEqual(['合同', '律师']);
+    // 重新加载后仍保留
+    expect(service.getAgent(agent.id)?.keywords).toEqual(['合同', '律师']);
+  });
+
+  it('updates keywords via updateAgent', async () => {
+    const modelId = await addModel();
+    const agent = await service.createAgent({
+      name: '法律文书',
+      modelId,
+      keywords: ['合同'],
+    });
+
+    const updated = await service.updateAgent(agent.id, {
+      keywords: ['合同', '起诉', '仲裁'],
+    });
+    expect(updated.keywords).toEqual(['合同', '起诉', '仲裁']);
+  });
+
+  it('does not add keywords field when not provided', async () => {
+    const modelId = await addModel();
+    const agent = await addAgent(modelId);
+    expect(agent.keywords).toBeUndefined();
+  });
+
   it('rejects update to a non-existent model', async () => {
     const modelId = await addModel();
     const agent = await addAgent(modelId);

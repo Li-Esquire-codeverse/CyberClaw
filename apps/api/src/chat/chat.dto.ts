@@ -25,9 +25,10 @@ export class ChatMessageDto {
  * 按 thread_id 持久化/恢复对话历史（对话记忆）；不携带时退化为单轮。
  */
 export class ChatRequestDto {
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'agentId is required' })
-  agentId!: string;
+  /** 智能体 id；缺省时由多 agent 路由按消息关键词分发（Phase 4） */
+  agentId?: string;
 
   @IsOptional()
   @IsString()

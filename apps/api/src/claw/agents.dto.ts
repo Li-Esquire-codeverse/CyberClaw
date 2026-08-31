@@ -30,6 +30,11 @@ export class CreateAgentDto {
   tools?: string[];
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keywords?: string[];
+
+  @IsOptional()
   @IsBoolean()
   enabled?: boolean;
 }
@@ -57,6 +62,11 @@ export class UpdateAgentDto {
   @IsArray()
   @IsString({ each: true })
   tools?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  keywords?: string[];
 
   @IsOptional()
   @IsBoolean()

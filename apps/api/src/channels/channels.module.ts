@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { findRepoRoot } from '@cyberclaw/agent-core';
 import { ChatModule } from '../chat/chat.module';
 import { ClawModule } from '../claw/claw.module';
+import { RoutingModule } from '../routing/routing.module';
 import {
   FEISHU_CLIENT,
   FEISHU_SESSIONS,
@@ -24,7 +25,7 @@ const dbPathOf = (): string => {
  * FeishuBotService 启动时静默跳过——不影响 WebUI/API。
  */
 @Module({
-  imports: [ChatModule, ClawModule],
+  imports: [ChatModule, ClawModule, RoutingModule],
   providers: [
     FeishuBotService,
     {

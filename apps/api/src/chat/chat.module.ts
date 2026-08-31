@@ -4,6 +4,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { ClawModule } from '../claw/claw.module';
 import { findRepoRoot } from '@cyberclaw/agent-core';
+import { RoutingModule } from '../routing/routing.module';
 import { ChatController } from './chat.controller';
 import { ChatService, CHAT_CHECKPOINTER, CHAT_TOOL_EXECUTORS } from './chat.service';
 import { ConversationsController } from './conversations.controller';
@@ -25,7 +26,7 @@ const dbPathOf = (): string => {
 };
 
 @Module({
-  imports: [ClawModule, MemoryModule],
+  imports: [ClawModule, MemoryModule, RoutingModule],
   controllers: [ChatController, ConversationsController],
   providers: [
     ChatService,

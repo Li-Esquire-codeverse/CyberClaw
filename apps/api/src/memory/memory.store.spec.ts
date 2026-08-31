@@ -3,6 +3,15 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MemoryStore } from './memory.store';
 
+/** 时间敏感用例统一用动态日期，避免测试随日期推移过期失败（曾写死 2026-08-20 超窗）。 */
+function daysAgo(n: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 describe('MemoryStore', () => {
   let root: string;
   let store: MemoryStore;
@@ -126,7 +135,7 @@ describe('MemoryStore', () => {
   });
 
   it('search 包含近 N 天 journal（MEMORY_JOURNAL_DAYS 可配）', async () => {
-    await store.appendJournal('今天讨论了 embedding 方案', '2026-08-20');
+    await store.appendJournal('今天讨论了 embedding 方案', daysAgo(1));
     process.env.MEMORY_JOURNAL_DAYS = '10';
     const hits = await store.search('embedding');
     expect(hits.some((h) => h.source === 'journal')).toBe(true);
@@ -140,7 +149,7 @@ describe('MemoryStore', () => {
 
   it('getStats 返回文件统计', async () => {
     await store.appendMemory('内容一');
-    await store.appendJournal('日记内容', '2026-08-20');
+    await store.appendJournal('日记内容', daysAgo(1));
     const stats = await store.getStats();
     expect(stats.memoryBytes).toBeGreaterThan(0);
     expect(stats.journalCount).toBeGreaterThanOrEqual(1);
@@ -149,11 +158,11 @@ describe('MemoryStore', () => {
 
   it('pruneJournal 删除过期日记，保留近期', async () => {
     await store.appendJournal('很旧的日记', '2020-01-01');
-    await store.appendJournal('昨天的日记', '2026-08-20');
+    await store.appendJournal('昨天的日记', daysAgo(1));
     const removed = await store.pruneJournal(30);
     expect(removed).toBe(1);
     expect(await store.readJournal('2020-01-01')).toBe('');
-    expect(await store.readJournal('2026-08-20')).toContain('昨天的日记');
+    expect(await store.readJournal(daysAgo(1))).toContain('昨天的日记');
   });
 
   it('pruneJournal 无 journal 目录时返回 0 不报错', async () => {

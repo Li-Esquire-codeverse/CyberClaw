@@ -16,6 +16,8 @@ export interface ClawAgent {
   /** 启用的工具名列表 */
   tools: string[];
   enabled: boolean;
+  /** 路由关键词：消息包含任一关键词（大小写不敏感）即分发给该智能体（Phase 4） */
+  keywords?: string[];
   createdAt?: string;
 }
 

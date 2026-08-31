@@ -39,7 +39,11 @@ export class ChatController {
   async chat(@Body() dto: ChatRequestDto, @Res() res: Response): Promise<void> {
     // 先构建 agent：校验失败时由 Nest 返回普通 JSON 错误（如 404/422），
     // 成功后才设置 SSE 头进入流式阶段，避免错误响应被当作事件流。
-    const built = await this.chatService.buildAgent(dto.agentId);
+    // agentId 缺省时走多 agent 路由（按消息关键词分发，Phase 4 A3）。
+    const lastUserMessage =
+      dto.messages?.filter((m) => m.role === 'user').at(-1)?.content ?? '';
+    const agentId = dto.agentId ?? this.chatService.resolveAgentIdOrThrow(lastUserMessage);
+    const built = await this.chatService.buildAgent(agentId);
 
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
