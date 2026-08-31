@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { ClawConfigService } from '../../claw/claw-config.service';
 import { ChatService } from '../../chat/chat.service';
+import { RouterService } from '../../routing/router.service';
 import { SseRenderer, FEISHU_TEXT_CHUNK_SIZE } from './feishu.renderer';
 import type { FeishuClientPort, FeishuIncomingMessage } from './feishu.lark-client';
 import type { FeishuSessionStore } from './feishu.sessions';
@@ -12,7 +13,7 @@ import type { FeishuSessionStore } from './feishu.sessions';
  *   - 缺凭据（client 为 null）→ 不启动（优雅降级）
  *   - 只处理 text 消息；群聊仅 @机器人 才响应
  *   - FEISHU_ALLOWED_USERS 白名单（open_id 逗号分隔，可选）
- *   - agent 选择：FEISHU_AGENT_ID ?? 第一个启用 agent
+ *   - agent 选择（Phase 4）：消息关键词路由 → FEISHU_AGENT_ID ?? 第一个启用 agent
  *   - 会话映射：chat_id → conversationId（FeishuSessions 持久化）
  */
 export const FEISHU_CLIENT = Symbol('FEISHU_CLIENT');
@@ -26,6 +27,7 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly chatService: ChatService,
     private readonly configService: ClawConfigService,
+    private readonly routerService: RouterService,
     @Inject(FEISHU_CLIENT)
     private readonly client: FeishuClientPort | null,
     @Inject(FEISHU_SESSIONS)
@@ -47,13 +49,18 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** 当前绑定的 agentId（环境变量优先，否则第一个启用 agent） */
-  private resolveAgentId(): string | undefined {
-    const env = process.env.FEISHU_AGENT_ID?.trim();
-    if (env) return env;
+  /**
+   * 当前绑定的 agentId（Phase 4 多 agent 路由）：
+   *   关键词命中（配置 keywords）→ 分发对应 agent；
+   *   无命中 → FEISHU_AGENT_ID ?? 第一个启用 agent（与 Phase 3 完全一致，向后兼容）。
+   */
+  private resolveAgentId(message: string): string | undefined {
     const config = this.configService.loadConfig();
-    const enabled = config.agents.find((a) => a.enabled);
-    return enabled?.id;
+    return this.routerService.resolveAgentId({
+      message,
+      agents: config.agents,
+      defaultAgentId: process.env.FEISHU_AGENT_ID?.trim() || undefined,
+    });
   }
 
   /**
@@ -159,7 +166,7 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
     // /agent 命令：切换智能体（不进入对话流程）
     if (await this.handleAgentCommand(msg.chatId, msg.text)) return;
 
-    const agentId = this.resolveAgentId();
+    const agentId = this.resolveAgentId(msg.text);
     if (!agentId) {
       await this.client.sendText(msg.chatId, '⚠️ 没有可用的智能体，请先在配置中创建并启用');
       return;

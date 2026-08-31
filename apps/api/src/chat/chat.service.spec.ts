@@ -16,6 +16,7 @@ import {
   type BuiltAgent,
 } from './chat.service';
 import { ClawConfigService } from '../claw/claw-config.service';
+import { RouterService } from '../routing/router.service';
 import { CONVERSATIONS_STORE } from './conversations.store';
 import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
 import type { ClawAgent } from '../claw/claw.types';
@@ -98,6 +99,7 @@ describe('ChatService', () => {
         { provide: CHAT_TOOL_EXECUTORS, useValue: {} },
         { provide: CONVERSATIONS_STORE, useValue: conversationsStore },
         { provide: MEMORY_STORE, useValue: memoryStore },
+        { provide: RouterService, useValue: new RouterService() },
       ],
     }).compile();
     service = moduleRef.get(ChatService);
@@ -475,6 +477,43 @@ describe('ChatService', () => {
     it('removeConversation 删除列表记录（MemorySaver 无 deleteThread 联动）', () => {
       expect(service.removeConversation('c1')).toBe(true);
       expect(conversationsStore.remove).toHaveBeenCalledWith('c1');
+    });
+  });
+
+  describe('resolveAgentIdOrThrow（多 agent 路由，Phase 4 A3）', () => {
+    it('按消息关键词命中对应 agent', () => {
+      configService.loadConfig.mockReturnValue({
+        agents: [
+          { ...sampleAgent, id: 'ag_law', name: '法律文书', keywords: ['合同', '律师'] },
+          sampleAgent,
+        ],
+        models: sampleConfig.models,
+        tools: sampleConfig.tools,
+      });
+      expect(service.resolveAgentIdOrThrow('帮我写份合同')).toBe('ag_law');
+    });
+
+    it('无关键词命中时回退第一个启用 agent', () => {
+      configService.loadConfig.mockReturnValue({
+        agents: [
+          { ...sampleAgent, id: 'ag_law', name: '法律文书', keywords: ['合同'] },
+          sampleAgent,
+        ],
+        models: sampleConfig.models,
+        tools: sampleConfig.tools,
+      });
+      expect(service.resolveAgentIdOrThrow('今天天气怎么样')).toBe('ag_law');
+    });
+
+    it('全部停用时抛 422', () => {
+      configService.loadConfig.mockReturnValue({
+        agents: [{ ...sampleAgent, enabled: false }],
+        models: sampleConfig.models,
+        tools: sampleConfig.tools,
+      });
+      expect(() => service.resolveAgentIdOrThrow('你好')).toThrow(
+        UnprocessableEntityException,
+      );
     });
   });
 });

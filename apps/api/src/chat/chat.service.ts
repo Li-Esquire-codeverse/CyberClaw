@@ -25,6 +25,7 @@ import type {
 } from '@cyberclaw/agent-core';
 import type { BaseCheckpointSaver } from '@cyberclaw/agent-core';
 import { ClawConfigService } from '../claw/claw-config.service';
+import { RouterService } from '../routing/router.service';
 import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
 import type { ClawAgent } from '../claw/claw.types';
 import type { ChatMessageDto } from './chat.dto';
@@ -161,7 +162,28 @@ export class ChatService {
     /** 会话列表元数据存储（SQLite） */
     @Inject(CONVERSATIONS_STORE)
     private readonly conversations: ConversationsStore,
+    /** 多 agent 路由（可选：未注册路由模块时退化为单智能体原行为） */
+    @Optional()
+    private readonly routerService?: RouterService,
   ) {}
+
+  /**
+   * 多 agent 路由：按消息关键词解析 agentId（Phase 4 A3）。
+   * 无命中时自动回退（第一个启用 agent / FEISHU_AGENT_ID）；
+   * 全部停用时抛 422（调用方提示"没有可用智能体"）。
+   */
+  resolveAgentIdOrThrow(message: string): string {
+    const config = this.configService.loadConfig();
+    const agentId = this.routerService?.resolveAgentId({
+      message,
+      agents: config.agents,
+      defaultAgentId: process.env.FEISHU_AGENT_ID?.trim() || undefined,
+    });
+    if (!agentId) {
+      throw new UnprocessableEntityException('没有可用的智能体，请先创建并启用至少一个智能体');
+    }
+    return agentId;
+  }
 
   /**
    * 读取配置并构建 langchain agent。

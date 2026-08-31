@@ -1,6 +1,8 @@
 import { Test } from '@nestjs/testing';
 import { ChatService } from '../../chat/chat.service';
 import { ClawConfigService } from '../../claw/claw-config.service';
+import { RouterService } from '../../routing/router.service';
+import { resolveAgentId } from '../../routing/router';
 import {
   FEISHU_CLIENT,
   FEISHU_SESSIONS,
@@ -27,6 +29,7 @@ describe('FeishuBotService', () => {
     switchAgent: jest.fn(() => 'conv-new'),
   };
   const configService = { loadConfig: jest.fn() };
+  const routerService = new RouterService();
 
   const sentTexts: { chatId: string; text: string }[] = [];
 
@@ -58,6 +61,7 @@ describe('FeishuBotService', () => {
         FeishuBotService,
         { provide: ChatService, useValue: chatService },
         { provide: ClawConfigService, useValue: configService },
+        { provide: RouterService, useValue: routerService },
         { provide: FEISHU_CLIENT, useValue: client },
         { provide: FEISHU_SESSIONS, useValue: sessions },
       ],
@@ -75,6 +79,7 @@ describe('FeishuBotService', () => {
         FeishuBotService,
         { provide: ChatService, useValue: chatService },
         { provide: ClawConfigService, useValue: configService },
+        { provide: RouterService, useValue: routerService },
         { provide: FEISHU_CLIENT, useValue: null },
         { provide: FEISHU_SESSIONS, useValue: sessions },
       ],
@@ -238,6 +243,14 @@ describe('FeishuBotService', () => {
 
   it('FEISHU_AGENT_ID 优先于默认 agent', async () => {
     process.env.FEISHU_AGENT_ID = 'ag_env';
+    configService.loadConfig.mockReturnValue({
+      agents: [
+        { id: 'ag_1', name: '测试助手', enabled: true },
+        { id: 'ag_env', name: 'env 指定', enabled: true },
+      ],
+      models: [],
+      tools: [],
+    });
     const built = { created: {}, agent: { id: 'ag_env', name: 'x' } };
     chatService.buildAgent.mockResolvedValue(built);
     chatService.streamChat.mockImplementation(
@@ -366,6 +379,64 @@ describe('FeishuBotService', () => {
     expect(sentTexts).toContainEqual({ chatId: 'c1', text: '简短回复' });
   });
 
+  // ==================== 多 agent 路由（Phase 4 A4） ====================
+
+  it('消息关键词命中时按路由分发到对应 agent', async () => {
+    configService.loadConfig.mockReturnValue({
+      agents: [
+        { id: 'ag_law', name: '法律文书', enabled: true, keywords: ['合同', '律师'] },
+        { id: 'ag_1', name: '测试助手', enabled: true },
+      ],
+      models: [],
+      tools: [],
+    });
+    const built = { created: {}, agent: { id: 'ag_law', name: '法律文书' } };
+    chatService.buildAgent.mockResolvedValue(built);
+    chatService.streamChat.mockImplementation(
+      async function* (): AsyncGenerator<ChatSseEvent> {
+        yield { choices: [{ delta: { role: 'assistant', content: '好的' } }] };
+        yield '[DONE]';
+      },
+    );
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '帮我写份合同',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(chatService.buildAgent).toHaveBeenCalledWith('ag_law');
+  });
+
+  it('无关键词命中时回退第一个启用 agent（Phase 3 行为向后兼容）', async () => {
+    configService.loadConfig.mockReturnValue({
+      agents: [
+        { id: 'ag_1', name: '测试助手', enabled: true },
+        { id: 'ag_law', name: '法律文书', enabled: true, keywords: ['合同'] },
+      ],
+      models: [],
+      tools: [],
+    });
+    const built = { created: {}, agent: { id: 'ag_1', name: '测试助手' } };
+    chatService.buildAgent.mockResolvedValue(built);
+    chatService.streamChat.mockImplementation(
+      async function* (): AsyncGenerator<ChatSseEvent> {
+        yield { choices: [{ delta: { role: 'assistant', content: '你好' } }] };
+        yield '[DONE]';
+      },
+    );
+    await service.handleMessage({
+      chatId: 'c1',
+      chatType: 'p2p',
+      messageType: 'text',
+      text: '今天天气怎么样',
+      senderOpenId: 'u1',
+      mentionBot: false,
+    });
+    expect(chatService.buildAgent).toHaveBeenCalledWith('ag_1');
+  });
+
   it('onModuleDestroy 停止长连接', async () => {
     await service.onModuleInit();
     await service.onModuleDestroy();
@@ -376,6 +447,7 @@ describe('FeishuBotService', () => {
     const svc = new FeishuBotService(
       chatService as unknown as ChatService,
       configService as unknown as ClawConfigService,
+      routerService,
       client,
       sessions,
     );
