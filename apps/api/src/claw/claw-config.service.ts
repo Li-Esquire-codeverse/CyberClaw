@@ -169,6 +169,7 @@ export class ClawConfigService {
       systemPrompt: input.systemPrompt,
       modelId: input.modelId,
       tools: Array.isArray(input.tools) ? input.tools : [],
+      keywords: Array.isArray(input.keywords) ? input.keywords : undefined,
       enabled: input.enabled ?? true,
       createdAt: new Date().toISOString(),
     };
@@ -212,6 +213,7 @@ export class ClawConfigService {
       systemPrompt: patch.systemPrompt !== undefined ? patch.systemPrompt : agent.systemPrompt,
       modelId: patch.modelId !== undefined ? patch.modelId : agent.modelId,
       tools: Array.isArray(patch.tools) ? patch.tools : agent.tools,
+      keywords: Array.isArray(patch.keywords) ? patch.keywords : agent.keywords,
       enabled: patch.enabled !== undefined ? patch.enabled : agent.enabled,
     };
 
