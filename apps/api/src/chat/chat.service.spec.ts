@@ -19,6 +19,7 @@ import { ClawConfigService } from '../claw/claw-config.service';
 import { RouterService } from '../routing/router.service';
 import { CONVERSATIONS_STORE } from './conversations.store';
 import { MEMORY_STORE, type MemoryStore } from '../memory/memory.store';
+import { CompactStore } from '../compaction/compact.store';
 import type { ClawAgent } from '../claw/claw.types';
 
 // @cyberclaw/agent-core 为 ESM 包，ChatService 内部用动态 import 加载，
@@ -63,6 +64,7 @@ function builtAgentOf(agent: ClawAgent = sampleAgent): BuiltAgent {
     created: {
       agent: {
         stream: jest.fn(),
+        getState: jest.fn(async () => ({ values: { messages: [] } })),
       } as unknown as BuiltAgent['created']['agent'],
       model: sampleConfig.models[0],
       chatModel: {} as BuiltAgent['created']['chatModel'],
@@ -88,6 +90,7 @@ describe('ChatService', () => {
     remove: jest.fn(() => true),
     close: jest.fn(),
   };
+  const compactStore = { loadSummary: jest.fn(), saveSummary: jest.fn() };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -99,6 +102,7 @@ describe('ChatService', () => {
         { provide: CHAT_TOOL_EXECUTORS, useValue: {} },
         { provide: CONVERSATIONS_STORE, useValue: conversationsStore },
         { provide: MEMORY_STORE, useValue: memoryStore },
+        { provide: CompactStore, useValue: compactStore },
         { provide: RouterService, useValue: new RouterService() },
       ],
     }).compile();
@@ -414,6 +418,127 @@ describe('ChatService', () => {
       );
       expect(roles).toEqual(['user', 'assistant', 'user']);
       expect(config).toMatchObject({ streamMode: 'messages' });
+    });
+  });
+
+  describe('压缩预处理（Phase 4 C2）', () => {
+    /** 线程历史：31 条 user/assistant 交替消息（超过 30 阈值） */
+    function longThreadMessages(): Array<HumanMessage | AIMessage> {
+      return Array.from({ length: 31 }, (_, i) =>
+        i % 2 === 0
+          ? new HumanMessage(`问题 ${i}`)
+          : new AIMessage(`回答 ${i}`),
+      );
+    }
+
+    beforeEach(() => {
+      compactStore.loadSummary.mockReturnValue(undefined);
+      compactStore.saveSummary.mockClear();
+    });
+
+    it('未超阈值：不重建 agent、不写摘要、不注入摘要文本', async () => {
+      const built = builtAgentOf();
+      (built.created.agent.stream as jest.Mock).mockImplementation(
+        async function* () {
+          yield [new AIMessageChunk({ content: 'hi' }), { langgraph_node: 'model' }];
+        },
+      );
+
+      const events = [];
+      for await (const evt of service.streamChat(
+        built,
+        [{ role: 'user', content: 'hi' }],
+        undefined,
+        'conv-1',
+      )) {
+        events.push(evt);
+      }
+
+      // 测试直接传 built（不经 buildAgent）：无重建 → createLangchainAgentMock 零调用
+      expect(createLangchainAgentMock).not.toHaveBeenCalled();
+      expect(compactStore.saveSummary).not.toHaveBeenCalled();
+      expect(events[events.length - 1]).toBe('[DONE]');
+    });
+
+    it('超阈值且无摘要：重建带摘要的 agent 并写入库', async () => {
+      const built = builtAgentOf();
+      (built.created.agent.stream as jest.Mock).mockImplementation(
+        async function* () {
+          yield [new AIMessageChunk({ content: 'ok' }), { langgraph_node: 'model' }];
+        },
+      );
+      // 线程历史超阈值
+      (built.created.agent.getState as unknown as jest.Mock).mockResolvedValue({
+        values: { messages: longThreadMessages() },
+      });
+      // 带摘要重建后返回的 agent（其 stream 即最终回复流）
+      const rebuilt = builtAgentOf();
+      (rebuilt.created.agent.stream as jest.Mock).mockImplementation(
+        async function* () {
+          yield [new AIMessageChunk({ content: '最终回复' }), { langgraph_node: 'model' }];
+        },
+      );
+      createLangchainAgentMock.mockResolvedValue(rebuilt.created);
+
+      const events = [];
+      for await (const evt of service.streamChat(
+        built,
+        [{ role: 'user', content: 'hi' }],
+        undefined,
+        'conv-1',
+      )) {
+        events.push(evt);
+      }
+
+      // 摘要生成路径复用传入 agent（不重建），仅注入重建 1 次
+      expect(createLangchainAgentMock).toHaveBeenCalledTimes(1);
+      // 摘要（来自摘要流 'ok'）已写入库
+      expect(compactStore.saveSummary).toHaveBeenCalledWith(
+        'conv-1',
+        expect.stringContaining('ok'),
+      );
+      // 重建的 agent systemPrompt 注入摘要 + 最近 10 条上下文
+      const lastCall = createLangchainAgentMock.mock.calls[0][0];
+      expect(lastCall.systemPrompt).toContain('【历史对话摘要】');
+      expect(lastCall.systemPrompt).toContain('【近期对话上下文】');
+      expect(lastCall.systemPrompt).toContain('问题 30'); // 最近 10 条（31 条的末尾）
+      expect(lastCall.systemPrompt).not.toContain('问题 0'); // 更早的历史不进上下文
+      expect(events[events.length - 1]).toBe('[DONE]');
+    });
+
+    it('超阈值且库中已有摘要（≤60 条）：复用不重算', async () => {
+      const built = builtAgentOf();
+      (built.created.agent.stream as jest.Mock).mockImplementation(
+        async function* () {
+          yield [new AIMessageChunk({ content: 'ok' }), { langgraph_node: 'model' }];
+        },
+      );
+      (built.created.agent.getState as unknown as jest.Mock).mockResolvedValue({
+        values: { messages: longThreadMessages() },
+      });
+      compactStore.loadSummary.mockReturnValue('旧摘要');
+      const rebuilt = builtAgentOf();
+      (rebuilt.created.agent.stream as jest.Mock).mockImplementation(
+        async function* () {
+          yield [new AIMessageChunk({ content: 'ok' }), { langgraph_node: 'model' }];
+        },
+      );
+      createLangchainAgentMock.mockResolvedValue(rebuilt.created);
+
+      for await (const _evt of service.streamChat(
+        built,
+        [{ role: 'user', content: 'hi' }],
+        undefined,
+        'conv-1',
+      )) {
+        /* collect */
+      }
+
+      // 只重建一次（带旧摘要），不触发摘要生成、不写库
+      expect(createLangchainAgentMock).toHaveBeenCalledTimes(1);
+      expect(compactStore.saveSummary).not.toHaveBeenCalled();
+      const lastCall = createLangchainAgentMock.mock.calls[0][0];
+      expect(lastCall.systemPrompt).toContain('旧摘要');
     });
   });
 

@@ -9,6 +9,7 @@ import { ChatController } from './chat.controller';
 import { ChatService, CHAT_CHECKPOINTER, CHAT_TOOL_EXECUTORS } from './chat.service';
 import { ConversationsController } from './conversations.controller';
 import { ConversationsStore, CONVERSATIONS_STORE } from './conversations.store';
+import { CompactStore } from '../compaction/compact.store';
 import { createToolExecutors } from '../tools/tool-executors';
 import { MemoryModule } from '../memory/memory.module';
 
@@ -44,6 +45,13 @@ const dbPathOf = (): string => {
     {
       provide: CONVERSATIONS_STORE,
       useFactory: () => new ConversationsStore(dbPathOf()),
+    },
+    {
+      // 压缩摘要存储（Phase 4 C1）：复用 conversations 表 summary 列
+      provide: CompactStore,
+      useFactory: (conversations: ConversationsStore) =>
+        new CompactStore(conversations),
+      inject: [CONVERSATIONS_STORE],
     },
     {
       // 真实工具执行器（web-search / translate / file-ops / shell / memory），按工具名注册
