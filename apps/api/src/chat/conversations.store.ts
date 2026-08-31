@@ -46,6 +46,13 @@ export class ConversationsStore {
       CREATE INDEX IF NOT EXISTS idx_conversations_agent
         ON conversations(agent_id, updated_at DESC);
     `);
+    // 兼容旧库：Phase 4 C1 引入 summary 列（压缩摘要），已存在的库无此列
+    const cols = this.db.prepare(`PRAGMA table_info(conversations)`).all() as Array<{
+      name: string;
+    }>;
+    if (!cols.some((c) => c.name === 'summary')) {
+      this.db.exec(`ALTER TABLE conversations ADD COLUMN summary TEXT`);
+    }
   }
 
   /** 按更新时间倒序列出会话（可按智能体过滤） */
@@ -95,6 +102,29 @@ export class ConversationsStore {
   remove(id: string): boolean {
     const res = this.db.prepare('DELETE FROM conversations WHERE id = ?').run(id);
     return res.changes > 0;
+  }
+
+  /** 读取会话压缩摘要（Phase 4 C1）；无记录/无摘要返回 undefined */
+  loadSummary(conversationId: string): string | undefined {
+    const row = this.db
+      .prepare(`SELECT summary FROM conversations WHERE id = ?`)
+      .get(conversationId) as { summary: string | null } | undefined;
+    if (!row || !row.summary) return undefined;
+    return row.summary;
+  }
+
+  /** 写入会话压缩摘要（Phase 4 C1）；会话不存在时自动创建占位记录 */
+  saveSummary(conversationId: string, summary: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO conversations (id, agent_id, title, created_at, updated_at, summary)
+         VALUES (@id, '', '新对话', @now, @now, @summary)
+         ON CONFLICT(id) DO UPDATE SET
+           summary = excluded.summary,
+           updated_at = excluded.updated_at`,
+      )
+      .run({ id: conversationId, now, summary });
   }
 
   close(): void {
