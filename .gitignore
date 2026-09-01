@@ -43,5 +43,6 @@ tmp/
 temp/
 *.tmp
 
-# ===== Runtime data (conversation memory sqlite) =====
+# ===== Runtime data (conversation memory sqlite / browser profile) =====
 data/
+data/browser-profile/

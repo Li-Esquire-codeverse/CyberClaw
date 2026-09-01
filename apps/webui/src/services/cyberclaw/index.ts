@@ -89,6 +89,20 @@ export const BUILTIN_TOOLS: ClawTool[] = [
     builtin: true,
     enabled: true,
     icon: 'chrome',
+    parameters: {
+      type: 'object',
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['navigate', 'click', 'type', 'extract'],
+          description: '要执行的动作',
+        },
+        url: { type: 'string', description: '要打开的网址（navigate 必填，http/https）' },
+        selector: { type: 'string', description: 'CSS 选择器（click/type/extract 必填）' },
+        text: { type: 'string', description: '要输入的文本（type 必填）' },
+      },
+      required: ['action'],
+    },
   },
   {
     name: 'file-ops',
