@@ -1,8 +1,13 @@
 // src/pages/chatbot/data.d.ts
 
+import type { ReactNode } from 'react';
+
 export interface ConversationItem {
   key: string;
-  label: string;
+  /** 展示用标题（含来源 Tag 时为 ReactNode） */
+  label: ReactNode;
+  /** 纯文本标题（重命名/删除确认等需要字符串的场景使用） */
+  rawTitle?: string;
   group?: string;
   isDraft?: boolean;
 }

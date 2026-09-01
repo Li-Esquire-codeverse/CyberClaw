@@ -12,12 +12,16 @@ export interface ConversationRecord {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** 会话来源：web（WebUI 新建）/ feishu（飞书渠道），供前端打来源标记 */
+  source?: string;
 }
 
 export interface UpsertConversationInput {
   id: string;
   agentId: string;
   title: string;
+  /** 会话来源，缺省为 web */
+  source?: string;
 }
 
 /**
@@ -53,6 +57,12 @@ export class ConversationsStore {
     if (!cols.some((c) => c.name === 'summary')) {
       this.db.exec(`ALTER TABLE conversations ADD COLUMN summary TEXT`);
     }
+    // 兼容旧库：Phase 4 C 会话来源标记列（web / feishu），已存在的库无此列
+    if (!cols.some((c) => c.name === 'source')) {
+      this.db.exec(
+        `ALTER TABLE conversations ADD COLUMN source TEXT NOT NULL DEFAULT 'web'`,
+      );
+    }
   }
 
   /** 按更新时间倒序列出会话（可按智能体过滤） */
@@ -61,7 +71,7 @@ export class ConversationsStore {
       return this.db
         .prepare(
           `SELECT id, agent_id AS agentId, title,
-                  created_at AS createdAt, updated_at AS updatedAt
+                  created_at AS createdAt, updated_at AS updatedAt, source
            FROM conversations WHERE agent_id = ?
            ORDER BY updated_at DESC`,
         )
@@ -70,7 +80,7 @@ export class ConversationsStore {
     return this.db
       .prepare(
         `SELECT id, agent_id AS agentId, title,
-                created_at AS createdAt, updated_at AS updatedAt
+                created_at AS createdAt, updated_at AS updatedAt, source
          FROM conversations ORDER BY updated_at DESC`,
       )
       .all() as unknown as ConversationRecord[];
@@ -81,17 +91,22 @@ export class ConversationsStore {
     const now = new Date().toISOString();
     this.db
       .prepare(
-        `INSERT INTO conversations (id, agent_id, title, created_at, updated_at)
-         VALUES (@id, @agentId, @title, @createdAt, @updatedAt)
+        `INSERT INTO conversations (id, agent_id, title, created_at, updated_at, source)
+         VALUES (@id, @agentId, @title, @createdAt, @updatedAt, @source)
          ON CONFLICT(id) DO UPDATE SET
            title = excluded.title,
            updated_at = excluded.updated_at`,
       )
-      .run({ ...input, createdAt: now, updatedAt: now });
+      .run({
+        ...input,
+        source: input.source ?? 'web',
+        createdAt: now,
+        updatedAt: now,
+      });
     const row = this.db
       .prepare(
         `SELECT id, agent_id AS agentId, title,
-                created_at AS createdAt, updated_at AS updatedAt
+                created_at AS createdAt, updated_at AS updatedAt, source
          FROM conversations WHERE id = ?`,
       )
       .get(input.id) as unknown as ConversationRecord;
