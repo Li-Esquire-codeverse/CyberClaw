@@ -116,6 +116,7 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
         id: conversationId,
         agentId: target.id,
         title: `飞书会话（切换至 ${target.name}）`,
+        source: 'feishu',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -180,6 +181,7 @@ export class FeishuBotService implements OnModuleInit, OnModuleDestroy {
         id: conversationId,
         agentId,
         title: msg.text.trim().slice(0, 30),
+        source: 'feishu',
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

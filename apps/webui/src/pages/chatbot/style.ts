@@ -43,6 +43,14 @@ export const useStyles = createStyles(({ css, token }) => ({
     flex-shrink: 0;
   `,
 
+  sidebarHint: css`
+    padding: 10px 16px;
+    font-size: ${token.fontSizeSM}px;
+    color: ${token.colorTextTertiary};
+    border-bottom: 1px solid ${token.colorBorderSecondary};
+    flex-shrink: 0;
+  `,
+
   main: css`
     flex: 1;
     display: flex;

@@ -243,19 +243,34 @@ const ChatbotPage: React.FC = () => {
     loadConversations(agentId).then((list) => {
       if (cancelled) return;
       if (list.length > 0) {
-        const items: ConversationItem[] = list.map((c) => ({
-          key: c.id,
-          label: c.title || '新对话',
-          group: '历史',
-          isDraft: false,
-        }));
+        const items: ConversationItem[] = list.map((c) => {
+          const title = c.title || '新对话';
+          return {
+            key: c.id,
+            // 飞书渠道创建的会话打「飞书」来源标记，便于区分
+            label:
+              c.source === 'feishu' ? (
+                <Space size={4}>
+                  <Tag color="cyan" style={{ marginInlineEnd: 0 }}>
+                    飞书
+                  </Tag>
+                  <span>{title}</span>
+                </Space>
+              ) : (
+                title
+              ),
+            rawTitle: title,
+            group: '历史',
+            isDraft: false,
+          };
+        });
         setConversations(items);
         setActiveKey((prev) => (prev && items.some((i) => i.key === prev) ? prev : items[0].key));
       } else {
         // 无历史会话：新建一个 draft
         const key = generateId();
         setConversations([
-          { key, label: '💬 新对话', group: '今天', isDraft: true },
+          { key, label: '💬 新对话', rawTitle: '新对话', group: '今天', isDraft: true },
         ]);
         setActiveKey(key);
       }
@@ -310,7 +325,12 @@ const ChatbotPage: React.FC = () => {
     setConversations((prev) =>
       prev.map((c) =>
         c.key === activeKey && c.isDraft
-          ? { ...c, label: text.slice(0, 20), isDraft: false }
+          ? {
+              ...c,
+              label: text.slice(0, 20),
+              rawTitle: text.slice(0, 20),
+              isDraft: false,
+            }
           : c,
       ),
     );
@@ -339,9 +359,15 @@ const ChatbotPage: React.FC = () => {
   };
 
   // ================= 会话重命名 =================
-  const startRename = (conversation: { key: string; label?: React.ReactNode }) => {
-    // 预填当前标题（去掉草稿的 💬 前缀）
-    setRenameValue(String(conversation.label ?? '').replace(/^💬\s*/, ''));
+  const startRename = (conversation: {
+    key: string;
+    label?: React.ReactNode;
+    rawTitle?: string;
+  }) => {
+    // 预填当前标题（优先纯文本 rawTitle，避免 ReactNode label 序列化失真）
+    setRenameValue(
+      String(conversation.rawTitle ?? conversation.label ?? '').replace(/^💬\s*/, ''),
+    );
     setRenamingKey(conversation.key);
   };
 
@@ -428,6 +454,9 @@ const ChatbotPage: React.FC = () => {
   );
 
   const hasMessages = parsedMessages.length > 0;
+  // 无历史会话（仅剩草稿/空列表）时在侧边栏给提示
+  const noHistory =
+    conversations.length === 0 || conversations.every((c) => c.isDraft);
   const welcomeText = currentAgent
     ? `🤖 你好，我是「${currentAgent.name}」，有什么可以帮你？`
     : '🤖 你好，有什么可以帮你？';
@@ -486,6 +515,11 @@ const ChatbotPage: React.FC = () => {
                   {conversations.length} 个会话
                 </span>
               </div>
+              {noHistory && (
+                <div className={styles.sidebarHint}>
+                  该智能体暂无会话，发送消息将自动创建新对话
+                </div>
+              )}
               <Conversations
                 items={conversations}
                 activeKey={activeKey}
@@ -504,8 +538,10 @@ const ChatbotPage: React.FC = () => {
                     if (action !== 'delete') return;
                     const target = conversation.key;
                     const label =
-                      String(conversation.label ?? '').replace(/^💬\s*/, '') ||
-                      '新对话';
+                      String(conversation.rawTitle ?? conversation.label ?? '').replace(
+                        /^💬\s*/,
+                        '',
+                      ) || '新对话';
                     // 二次确认，避免误删（后端清理列表元数据 + 线程记忆）
                     Modal.confirm({
                       title: '删除会话',

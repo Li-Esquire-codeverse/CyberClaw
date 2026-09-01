@@ -5,6 +5,7 @@ import { fileOpsExecutor } from './file-ops.executor';
 import { shellExecutor } from './shell.executor';
 import { MemoryStore, MEMORY_STORE, defaultMemoryStore } from '../memory/memory.store';
 import { createMemoryExecutor } from './memory.executor';
+import { createBrowserExecutor } from './browser.executor';
 
 /**
  * 真实工具执行器注册表（注入到 CHAT_TOOL_EXECUTORS）。
@@ -18,6 +19,8 @@ import { createMemoryExecutor } from './memory.executor';
  *   - FILE_OPS_ROOT：file-ops 允许访问的工作区根（缺省 monorepo 根）
  *   - SHELL_ROOT：shell 的 cwd 限制根（缺省 monorepo 根）
  *   - MEMORY_JOURNAL_DAYS：memory search 检索近几天日记（缺省 3）
+ *   - browser：Playwright chromium 无头浏览器（navigate/click/type/extract）；
+ *     二进制缺失时返回「browser 工具未就绪」降级提示，不影响其他工具
  */
 export function createToolExecutors(
   memoryStore: MemoryStore = defaultMemoryStore,
@@ -29,5 +32,7 @@ export function createToolExecutors(
     shell: shellExecutor,
     // memory 工具与 ChatService 注入共用同一 store 实例（写队列统一）
     memory: createMemoryExecutor(memoryStore),
+    // browser 工具：惰性启动 + 独立 profile（data/browser-profile/，gitignore）
+    browser: createBrowserExecutor(),
   };
 }

@@ -148,6 +148,8 @@ export interface ConversationRecord {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /** 会话来源：web（WebUI 新建）/ feishu（飞书渠道），用于列表打来源标记 */
+  source?: string;
 }
 
 /** 会话列表：按更新时间倒序 */
